@@ -59,12 +59,12 @@
 - [x] `cmd/x/main.go` (Cobra Execute + exit code 伝播)
 - 完了: `x version` / `x --version` / `x completion {bash,zsh,fish,powershell}` / `x __complete` 動作確認、25 テストケース全 pass
 
-#### M2: CI 軽量基盤 + Lint + Dockerfile
-- [ ] `.github/workflows/ci.yml` (lint + test on PR/push)
-- [ ] `.golangci.yml`
-- [ ] `Dockerfile` (multi-stage, distroless)
-- [ ] `.dockerignore`
-- 完了条件: CI が green、`docker build` 成功
+#### M2: CI 軽量基盤 + Lint + Dockerfile ✅ 完了 (commit: 41ae9ad)
+- [x] `.github/workflows/ci.yml` (lint + test + build + docker on PR/push, LANG=C)
+- [x] `.golangci.yml` (v2 形式、default:none + 8 linters + gofumpt formatter)
+- [x] `Dockerfile` (multi-stage, alpine builder → distroless/static-debian12:nonroot)
+- [x] `.dockerignore`
+- 完了: ローカルで lint 0 issues / 25 テスト pass / docker build 成功 (11.7MB) / `x:dev version` JSON 出力動作 / `--build-arg` ldflags 注入動作
 - TDD 観点: M3 以降のテスト追加時に常時 lint+race+coverage を強制
 
 #### M3: `internal/config` XDG loader (非機密設定のみ)
