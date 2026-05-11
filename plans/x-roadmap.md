@@ -82,10 +82,10 @@
 
 ### Phase B: X API クライアント
 
-#### M5: `internal/xapi/oauth1.go` (dghubble/oauth1 ラッパー + 署名検証)
-- [ ] OAuth 1.0a HMAC-SHA1 署名
-- [ ] Twitter 公式テストベクトルで署名一致
-- 完了条件: `dghubble/oauth1.Config` ラッパーが標準テストケースで pass
+#### M5: `internal/xapi/oauth1.go` (dghubble/oauth1 ラッパー) ✅ 完了 (commit: 17d1c4f)
+- [x] OAuth 1.0a HMAC-SHA1 署名 (`NewOAuth1Config` + `NewHTTPClient`)
+- [x] httptest 経由で Authorization ヘッダ検証 (7 テスト)
+- 完了: dghubble/oauth1 v0.7.3 追加、Credentials→Config マッピング、nil creds 安全動作、RFC 5849 oauth_version OPTIONAL 扱い
 
 #### M6: `internal/xapi/client.go` (retry + rate-limit aware HTTP)
 - [ ] HTTP client (retry, exponential backoff, max 3 retry, max 30s)
