@@ -37,21 +37,26 @@ func main() {
 // 本関数で stderr にメッセージを出力する。
 //
 // エラー → exit code 写像 (上から優先):
-//  1. isArgumentError(err) → ExitArgumentError (2): 未知サブコマンド / フラグ
-//  2. errors.Is(err, xapi.ErrAuthentication) → ExitAuthError (3): 401 / 認証情報欠落
-//  3. errors.Is(err, xapi.ErrPermission)     → ExitPermissionError (4): 403
-//  4. errors.Is(err, xapi.ErrNotFound)       → ExitNotFoundError (5): 404
-//  5. fallback                                → ExitGenericError (1)
+//  1. isArgumentError(err)                       → ExitArgumentError (2): Cobra 未知サブコマンド / フラグ
+//  2. errors.Is(err, cli.ErrInvalidArgument)     → ExitArgumentError (2): RunE 内の引数バリデーション失敗
+//  3. errors.Is(err, xapi.ErrAuthentication)     → ExitAuthError (3): 401 / 認証情報欠落
+//  4. errors.Is(err, xapi.ErrPermission)         → ExitPermissionError (4): 403
+//  5. errors.Is(err, xapi.ErrNotFound)           → ExitNotFoundError (5): 404
+//  6. fallback                                   → ExitGenericError (1)
 //
-// 番兵エラーは xapi 層 (M6) で定義されており、CLI 層の ErrCredentialsMissing も
-// xapi.ErrAuthentication を Unwrap で内包しているため上記 2. の経路で exit 3 に
-// 写像される (plans/x-m09-cli-me.md D-1)。
+// 番兵エラーは xapi 層 (M6) と cli 層 (M9 ErrCredentialsMissing / M10 ErrInvalidArgument)
+// で定義されており、CLI 層の ErrCredentialsMissing は xapi.ErrAuthentication を Unwrap で
+// 内包しているため上記 3. の経路で exit 3 に写像される (plans/x-m09-cli-me.md D-1)。
+// M10 で追加した ErrInvalidArgument は CLI 固有番兵で 2. の経路で exit 2 に写像される
+// (plans/x-m10-cli-liked-basic.md D-1)。
 func run() int {
 	root := cli.NewRootCmd()
 	if err := root.ExecuteContext(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
 		switch {
 		case isArgumentError(err):
+			return app.ExitArgumentError
+		case errors.Is(err, cli.ErrInvalidArgument):
 			return app.ExitArgumentError
 		case errors.Is(err, xapi.ErrAuthentication):
 			return app.ExitAuthError

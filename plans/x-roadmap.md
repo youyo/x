@@ -19,15 +19,15 @@
 | 対象リポジトリ | `/Users/youyo/src/github.com/youyo/x` |
 | 作成日 | 2026-05-12 |
 | 最終更新 | 2026-05-12 |
-| ステータス | 進行中 (M1 詳細計画完了、実装未着手) |
+| ステータス | 進行中 (M10 完了、M11 着手前) |
 | スペック | `docs/specs/x-spec.md` (v1.0.0 Approved) |
 | マイルストーン総数 | 28 (細粒度方針) |
 
 ## Current Focus
 
-- **マイルストーン**: M10 (CLI `x liked list` 基本フラグ)
-- **直近の完了**: M9 (CLI `x me` + auth_loader + main.go の exit code 写像)
-- **次のアクション**: M10 の詳細計画作成と実装
+- **マイルストーン**: M11 (CLI `x liked list` 拡張)
+- **直近の完了**: M10 (CLI `x liked list` 基本フラグ + `ErrInvalidArgument` 番兵 + exit 2 写像)
+- **次のアクション**: M11 の詳細計画作成と実装
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
@@ -119,11 +119,14 @@
 - 完了: JSON / human 出力 (--no-json) で動作、認証情報欠落 → exit 3、401 → exit 3、404 → exit 5。18 新規テスト全 pass、計 118+ テスト、lint 0 issues
 - 留意: env > file は **ファイル単位** 優先順位 (タスク指示準拠、フィールド単位部分上書きは将来 M12 で再評価)。meClient interface + newMeClient 関数変数で httptest baseURL 注入を可能化。`xapi.WithBaseURL` を利用
 
-#### M10: CLI `x liked list` 基本フラグ
-- [ ] `internal/cli/liked.go`
-- [ ] `--user-id` / `--start-time` / `--end-time` / `--max-results` / `--pagination-token`
-- [ ] JSON 出力
-- 完了条件: 基本フラグでシングルページ取得が動作
+#### M10: CLI `x liked list` 基本フラグ ✅ 完了
+- [x] `internal/cli/liked.go` (newLikedCmd + newLikedListCmd + likedClient interface + newLikedClient var-swap for test)
+- [x] `internal/cli/errors.go` (ErrInvalidArgument 番兵)
+- [x] `--user-id` / `--start-time` / `--end-time` / `--max-results` / `--pagination-token` / `--no-json`
+- [x] JSON 出力 (default, `{data, includes, meta}` 全体) + human 出力 (`--no-json` で 1 行/ツイート、改行 / タブ正規化 + 80 ルーン truncate)
+- [x] `cmd/x/main.go` の switch に `cli.ErrInvalidArgument → ExitArgumentError (2)` を追加
+- 完了: 21 新規テスト全 pass、計 140+ テスト、lint 0 issues、`/tmp/x liked list --max-results 999` で exit 2 確認
+- 留意: `--user-id` 未指定 → GetUserMe で self の ID を解決 (D-2)。`WithMaxResults` は常に呼ぶ (default=100 を 0 に流さない D-3)。JSON 出力は `*xapi.LikedTweetsResponse` 全体を出して MCP `get_liked_tweets` のスキーマと整合 (D-4)
 
 #### M11: CLI `x liked list` 拡張
 - [ ] `--since-jst <YYYY-MM-DD>` / `--yesterday-jst`
