@@ -1,0 +1,23 @@
+# binary
+/x
+/dist/
+
+# secrets
+credentials.toml
+.env
+.env.*
+!.env.example
+
+# Go
+*.test
+*.out
+coverage.out
+go.work
+go.work.sum
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
