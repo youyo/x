@@ -87,11 +87,11 @@
 - [x] httptest 経由で Authorization ヘッダ検証 (7 テスト)
 - 完了: dghubble/oauth1 v0.7.3 追加、Credentials→Config マッピング、nil creds 安全動作、RFC 5849 oauth_version OPTIONAL 扱い
 
-#### M6: `internal/xapi/client.go` (retry + rate-limit aware HTTP)
-- [ ] HTTP client (retry, exponential backoff, max 3 retry, max 30s)
-- [ ] `x-rate-limit-remaining` / `x-rate-limit-reset` ヘッダパース
-- [ ] エラーマッピング → exit code 3/4/5
-- 完了条件: httptest で 429/5xx/401/403/404 の各シナリオを TDD で検証
+#### M6: `internal/xapi/client.go` (retry + rate-limit aware HTTP) ✅ 完了 (commit: 93b8558)
+- [x] Client.Do 内 retry (exp backoff: base 2s, factor 2, max 30s, max 3 retry)、context-aware sleep
+- [x] x-rate-limit-remaining/reset パース → Response.RateLimit (Raw フラグで枯渇判定誤動作防止)
+- [x] APIError + 番兵エラー (ErrAuthentication/Permission/NotFound/RateLimit) + ExitCodeFor(err) で 0/1/3/4/5
+- 完了: 22 テスト (httptest + 未公開 DI オプション)、計 70+ テスト全 pass、lint 0 issues
 
 #### M7: `internal/xapi/users.go` (GetUserMe + DTO)
 - [ ] `Tweet` / `User` / `Meta` DTO 定義
