@@ -12,22 +12,21 @@ const ServerName = "x"
 
 // NewServer は X API CLI 用の MCP サーバーを構築する。
 //
-// 本マイルストーン (M15) では tools 登録を行わず、tool capability のみを
-// 宣言した空サーバーを返す。tools (get_user_me / get_liked_tweets) は
-// 後続マイルストーン (M17 / M18) で別ファイルの登録関数経由で差し込む。
+// 構築時に tool capability を宣言した上で、登録済み tools を順次差し込む:
+//   - M17: get_user_me (registerToolMe)
+//   - M18 以降: get_liked_tweets 等が追加予定
 //
 // 引数:
-//   - client: X API 呼び出しに利用する xapi.Client。M15 時点では未使用だが、
-//     M17 以降で tool handler に注入するためシグネチャに含めておく。
+//   - client: X API 呼び出しに利用する xapi.Client。nil でも登録自体は成功する
+//     (ハンドラ実行時にしか参照されないため)。実運用では非 nil を渡すこと。
 //   - version: server.version として initialize レスポンスに反映される。
 //     ldflags 注入される binary version (internal/version) を渡すことを想定する。
 func NewServer(client *xapi.Client, version string) *mcpserver.MCPServer {
-	// client は M17 以降で使用する。Go の未使用関数引数は idiomatic であり
-	// linter も flag しないため discard は不要。
-	_ = client
-	return mcpserver.NewMCPServer(
+	s := mcpserver.NewMCPServer(
 		ServerName,
 		version,
 		mcpserver.WithToolCapabilities(true),
 	)
+	registerToolMe(s, client)
+	return s
 }
