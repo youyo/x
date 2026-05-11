@@ -49,15 +49,15 @@
 
 ### Phase A: 基盤整備
 
-#### M1: リポジトリ初期化 + Kong スケルトン + `x version` 【詳細計画あり ↓】
-- [ ] go mod init / mise.toml / .gitignore
-- [ ] `internal/app` (exit code 6 個)
-- [ ] `internal/version` (ldflags 注入)
-- [ ] `internal/cli/root.go` (Kong + VersionFlag)
-- [ ] `internal/cli/version.go` (`x version` JSON/human)
-- [ ] `internal/cli/completion.go` (bash/zsh/fish)
-- [ ] `cmd/x/main.go` (Kong + 補完 intercept + exit code 伝播)
-- 完了条件: `x version` / `x --version` / `x completion {bash,zsh,fish}` / `x --completion-bash ...` が動作
+#### M1: リポジトリ初期化 + Cobra スケルトン + `x version` ✅ 完了 (commit: e83b70d)
+- [x] go mod init / mise.toml / .gitignore
+- [x] `internal/app` (exit code 6 個)
+- [x] `internal/version` (ldflags 注入)
+- [x] `internal/cli/root.go` (Cobra root + Version)
+- [x] `internal/cli/version.go` (`x version` JSON/human)
+- [x] Cobra 標準 completion (bash/zsh/fish/powershell) — 自前実装不要
+- [x] `cmd/x/main.go` (Cobra Execute + exit code 伝播)
+- 完了: `x version` / `x --version` / `x completion {bash,zsh,fish,powershell}` / `x __complete` 動作確認、25 テストケース全 pass
 
 #### M2: CI 軽量基盤 + Lint + Dockerfile
 - [ ] `.github/workflows/ci.yml` (lint + test on PR/push)
