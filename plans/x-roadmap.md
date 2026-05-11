@@ -19,15 +19,15 @@
 | 対象リポジトリ | `/Users/youyo/src/github.com/youyo/x` |
 | 作成日 | 2026-05-12 |
 | 最終更新 | 2026-05-12 |
-| ステータス | 進行中 (M10 完了、M11 着手前) |
+| ステータス | 進行中 (M15 完了、M16 着手前) |
 | スペック | `docs/specs/x-spec.md` (v1.0.0 Approved) |
 | マイルストーン総数 | 28 (細粒度方針) |
 
 ## Current Focus
 
-- **マイルストーン**: M15 (MCP サーバー雛形 + transport/http)
-- **直近の完了**: M14 (`.github/workflows/release.yml` 追加、v0.1.0 タグ push は将来手動実施)
-- **次のアクション**: M15 の詳細計画作成と実装 (`internal/mcp/` + `internal/transport/http/`)
+- **マイルストーン**: M16 (authgate 基盤 + none モード)
+- **直近の完了**: M15 (`internal/mcp/` + `internal/transport/http/` 雛形追加、mark3labs/mcp-go v0.52.0 導入)
+- **次のアクション**: M16 の詳細計画作成と実装 (`internal/authgate/gate.go` + `none.go`)
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
@@ -187,10 +187,13 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 
 ### Phase E: MCP コア
 
-#### M15: MCP サーバー雛形 + transport/http
-- [ ] `internal/mcp/server.go` (`NewServer(client, ver)` ファクトリ, mark3labs/mcp-go)
-- [ ] `internal/transport/http/server.go` (Streamable HTTP + graceful shutdown, LWA 互換)
-- 完了条件: 空サーバーが起動・`initialize` リクエストに応答
+#### M15: MCP サーバー雛形 + transport/http ✅ 完了
+- [x] `internal/mcp/server.go` (`NewServer(client, ver)` ファクトリ, mark3labs/mcp-go v0.52.0)
+- [x] `internal/mcp/doc.go` (パッケージドキュメンテーション)
+- [x] `internal/transport/http/server.go` (Streamable HTTP + graceful shutdown, LWA 互換, Option パターン)
+- [x] `internal/transport/http/doc.go`
+- 完了: 空サーバーで `initialize` リクエストに 200 + serverInfo 応答 (JSON / SSE 両対応テスト)、context cancel での graceful shutdown 30s、ReadHeaderTimeout 10s 設定、calc 8 新規テスト全 pass、計 全パッケージ pass、lint 0 issues
+- 留意: tools 登録は M17 (`get_user_me`) / M18 (`get_liked_tweets`) で実装。authgate middleware フックは M16 で `Option` 追加予定 (`WithHandlerMiddleware` 想定)。cobra サブコマンド `x mcp` の追加は M24
 
 #### M16: authgate 基盤 + none モード
 - [ ] `internal/authgate/gate.go` (Middleware interface)
