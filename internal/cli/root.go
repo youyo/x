@@ -2,9 +2,15 @@
 //
 // 本ファイルは NewRootCmd() factory のみを提供する。グローバル状態を持たないため
 // テストでは複数の RootCmd を並行生成でき、本番では cmd/x/main.go から一度だけ
-// 呼び出される。サブコマンド (`version`, `me`, `liked`, `mcp`, `configure` 等) は
-// AddCommand で順次足していく方針。M3 以降では PersistentFlags
-// (--format / --no-color / --config 等) を root.PersistentFlags() に追加する。
+// 呼び出される。サブコマンドは AddCommand で順次足す:
+//   - version (M1):   `x version` (JSON / human 出力)
+//   - me (M9):        `x me` 認証ユーザー情報
+//   - liked (M10/11): `x liked list` Liked Tweets 取得
+//   - configure (M12): `~/.config/x/config.toml` / credentials.toml の対話生成
+//   - mcp (M24):      `x mcp` Streamable HTTP MCP サーバー起動 (3 モード認証)
+//
+// M3 以降では PersistentFlags (--format / --no-color / --config 等) を
+// root.PersistentFlags() に追加する。
 package cli
 
 import (
@@ -43,6 +49,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newMeCmd())
 	root.AddCommand(newLikedCmd())
 	root.AddCommand(newConfigureCmd())
+	root.AddCommand(newMcpCmd())
 	// NOTE: completion サブコマンドは Cobra が自動追加する (HasAvailableSubCommands が真のため)。
 	// NOTE: M3 で root.PersistentFlags().StringP("format","f","json",...) を追加予定。
 	return root
