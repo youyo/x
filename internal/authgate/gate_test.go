@@ -23,19 +23,53 @@ func TestNew_None_ReturnsNoneMiddleware(t *testing.T) {
 	}
 }
 
-// TestNew_APIKey_ReturnsErrUnsupportedMode は M16 で apikey が未実装であることを契約として pin する。
-func TestNew_APIKey_ReturnsErrUnsupportedMode(t *testing.T) {
+// TestNew_APIKey_NoOption_ReturnsErrAPIKeyMissing は Option 無しで ModeAPIKey を指定すると
+// ErrAPIKeyMissing が返ることを確認する。env 直読をしない契約を pin する。
+func TestNew_APIKey_NoOption_ReturnsErrAPIKeyMissing(t *testing.T) {
 	t.Parallel()
 
 	mw, err := authgate.New(authgate.ModeAPIKey)
 	if err == nil {
-		t.Fatal("New(ModeAPIKey) returned nil error, want ErrUnsupportedMode")
+		t.Fatal("New(ModeAPIKey) returned nil error, want ErrAPIKeyMissing")
 	}
-	if !errors.Is(err, authgate.ErrUnsupportedMode) {
-		t.Errorf("New(ModeAPIKey) error = %v, want errors.Is ErrUnsupportedMode", err)
+	if !errors.Is(err, authgate.ErrAPIKeyMissing) {
+		t.Errorf("New(ModeAPIKey) error = %v, want errors.Is ErrAPIKeyMissing", err)
 	}
 	if mw != nil {
 		t.Errorf("New(ModeAPIKey) returned non-nil Middleware: %T", mw)
+	}
+}
+
+// TestNew_APIKey_WithEmptyAPIKey_ReturnsErrAPIKeyMissing は WithAPIKey("") でも
+// ErrAPIKeyMissing が返ることを確認する。
+func TestNew_APIKey_WithEmptyAPIKey_ReturnsErrAPIKeyMissing(t *testing.T) {
+	t.Parallel()
+
+	mw, err := authgate.New(authgate.ModeAPIKey, authgate.WithAPIKey(""))
+	if err == nil {
+		t.Fatal("New(ModeAPIKey, WithAPIKey(\"\")) returned nil error, want ErrAPIKeyMissing")
+	}
+	if !errors.Is(err, authgate.ErrAPIKeyMissing) {
+		t.Errorf("error = %v, want errors.Is ErrAPIKeyMissing", err)
+	}
+	if mw != nil {
+		t.Errorf("returned non-nil Middleware: %T", mw)
+	}
+}
+
+// TestNew_APIKey_WithAPIKey_Success は WithAPIKey("key") で *APIKey が返ることを確認する。
+func TestNew_APIKey_WithAPIKey_Success(t *testing.T) {
+	t.Parallel()
+
+	mw, err := authgate.New(authgate.ModeAPIKey, authgate.WithAPIKey("secret-key"))
+	if err != nil {
+		t.Fatalf("New(ModeAPIKey, WithAPIKey(\"secret-key\")) returned error: %v", err)
+	}
+	if mw == nil {
+		t.Fatal("returned nil Middleware")
+	}
+	if _, ok := mw.(*authgate.APIKey); !ok {
+		t.Errorf("returned %T, want *authgate.APIKey", mw)
 	}
 }
 
