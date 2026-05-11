@@ -146,12 +146,12 @@
 
 ### Phase D: v0.1.0 リリース
 
-#### M13: README / CHANGELOG / LICENSE / GoReleaser
-- [ ] `README.md` (English) / `README.ja.md` (日本語)
-- [ ] `CHANGELOG.md` (Keep a Changelog 形式)
-- [ ] `LICENSE` (MIT)
-- [ ] `.goreleaser.yaml` (darwin/linux × amd64/arm64, Homebrew tap, ghcr.io)
-- 完了条件: `goreleaser release --snapshot --clean` 成功
+#### M13: README / CHANGELOG / LICENSE / GoReleaser ✅ 完了 (commit: d077bcd)
+- [x] `README.md` (英) / `README.ja.md` (日) - 12 セクション + 双方向リンク
+- [x] `CHANGELOG.md` (Keep a Changelog v1.1.0、[0.1.0] - 2026-05-12)
+- [x] `LICENSE` (MIT, Copyright 2026 Naoto Ishizawa / Heptagon)
+- [x] `.goreleaser.yaml` (darwin/linux × amd64/arm64 + Homebrew tap + ghcr.io multi-arch)
+- 完了: `goreleaser release --snapshot --clean --skip docker` で 4 platform binary + tarball 生成、ldflags 注入確認、テスト全 pass
 
 #### M14: GitHub Actions release.yml + v0.1.0 タグ
 - [ ] `.github/workflows/release.yml` (tag push → GoReleaser + Homebrew + ghcr.io)
