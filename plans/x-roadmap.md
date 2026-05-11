@@ -136,11 +136,13 @@
 - 完了: 18 新規テスト、計 41+ CLI テスト、優先順位 yesterday-jst > since-jst > start/end、--no-json と --ndjson 排他 (exit 2)
 - 留意: ハードコードのデフォルト値は M12 で config.toml [liked] 連携に移管予定
 
-#### M12: CLI `x configure` + `x completion` 拡張
-- [ ] 対話モード (XDG パス 2 ファイル生成)
-- [ ] `--print-paths` / `--check`
-- [ ] credentials.toml 既存時の保護
-- 完了条件: `x configure` で初期セットアップが完結し、`x configure --check` で構成検証可能
+#### M12: CLI `x configure` + config.toml [liked] 連携 ✅ 完了 (commit: ab5ebdc)
+- [x] 対話モード (XDG パス 2 ファイル生成、term.ReadPassword で TTY echo オフ + 非 TTY フォールバック)
+- [x] `--print-paths` / `--check` (JSON + --no-json human フォーマット)
+- [x] credentials.toml 既存時の保護 (上書き確認 `[y/N]` プロンプト)
+- [x] config.toml [liked] 連携: loadLikedDefaults() でハードコード定数を置換
+- 完了: 12 新規テスト (configure 11 + liked config 連携 1)、coverage 85.6%、golangci-lint 0 issues
+- 留意: x completion は cobra が自動提供 (HasSubCommands 真) のため別途実装不要
 
 ### Phase D: v0.1.0 リリース
 
