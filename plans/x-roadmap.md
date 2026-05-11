@@ -93,10 +93,11 @@
 - [x] APIError + 番兵エラー (ErrAuthentication/Permission/NotFound/RateLimit) + ExitCodeFor(err) で 0/1/3/4/5
 - 完了: 22 テスト (httptest + 未公開 DI オプション)、計 70+ テスト全 pass、lint 0 issues
 
-#### M7: `internal/xapi/users.go` (GetUserMe + DTO)
-- [ ] `Tweet` / `User` / `Meta` DTO 定義
-- [ ] `GetUserMe(ctx)` 実装
-- 完了条件: httptest mock で `/2/users/me` が users.go に渡る統合テスト pass
+#### M7: `internal/xapi/users.go` (GetUserMe + DTO) ✅ 完了 (commit: bc2aff5)
+- [x] types.go: User/Tweet/Meta/Includes/ErrorResponse + UserPublicMetrics
+- [x] GetUserMe(ctx, opts...) + WithUserFields クエリオプション
+- 完了: 16 新規テスト (httptest + envelope + JSON unmarshal)、計 80+ テスト全 pass、lint 0 issues
+- 留意: User.ID の json タグは "id"、MCP 層 (M17) で "user_id" にリネームが必要
 
 #### M8: `internal/xapi/likes.go` (ListLikedTweets + ページネーション)
 - [ ] `ListLikedTweets(ctx, params)` シングルページ
