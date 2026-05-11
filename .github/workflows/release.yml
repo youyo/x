@@ -1,0 +1,69 @@
+# リリースワークフロー
+#
+# トリガー: v* タグ push のみ。
+# ジョブ: goreleaser 単一ジョブ。darwin/linux × amd64/arm64 バイナリ + tarball、
+#         GitHub Releases 投稿、Homebrew tap 更新、ghcr.io multi-arch image push。
+#
+# 必須 secrets:
+#   - GITHUB_TOKEN: GitHub Releases 投稿 + ghcr.io login (デフォルト付与)
+#   - HOMEBREW_TAP_GITHUB_TOKEN: youyo/homebrew-tap への push 用 PAT (repo scope)
+#
+# permissions:
+#   - contents: write   GitHub Releases 投稿に必要
+#   - packages: write   ghcr.io へのイメージ push に必要
+#
+# 設計判断:
+#   - goreleaser-action は @v6 (メジャータグ pin)。Dependabot 導入後に SHA pin へ移行可能。
+#   - setup-go は go-version-file: go.mod を使用 (go.mod を信頼源とする)。
+#   - docker/setup-qemu + setup-buildx は .goreleaser.yaml の dockers が
+#     use: buildx + --platform=linux/{amd64,arm64} を要求するため必須。
+#   - 既存 ci.yml と分離: ci.yml は main への push/PR、release.yml は v* タグ push。
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 全タグ参照 (changelog 生成に必要)
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up QEMU (multi-arch docker)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

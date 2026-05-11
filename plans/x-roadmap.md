@@ -25,9 +25,9 @@
 
 ## Current Focus
 
-- **マイルストーン**: M13 (README/CHANGELOG/LICENSE/GoReleaser)
-- **直近の完了**: M12 (CLI `x configure` 対話モード + `--print-paths` / `--check` + config.toml [liked] 連携)
-- **次のアクション**: M13 の詳細計画作成と実装 (v0.1.0 リリース準備)
+- **マイルストーン**: M15 (MCP サーバー雛形 + transport/http)
+- **直近の完了**: M14 (`.github/workflows/release.yml` 追加、v0.1.0 タグ push は将来手動実施)
+- **次のアクション**: M15 の詳細計画作成と実装 (`internal/mcp/` + `internal/transport/http/`)
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
@@ -153,10 +153,37 @@
 - [x] `.goreleaser.yaml` (darwin/linux × amd64/arm64 + Homebrew tap + ghcr.io multi-arch)
 - 完了: `goreleaser release --snapshot --clean --skip docker` で 4 platform binary + tarball 生成、ldflags 注入確認、テスト全 pass
 
-#### M14: GitHub Actions release.yml + v0.1.0 タグ
-- [ ] `.github/workflows/release.yml` (tag push → GoReleaser + Homebrew + ghcr.io)
-- [ ] `v0.1.0` タグ作成
-- 完了条件: GitHub Releases に成果物が掲載、`brew install youyo/tap/x` で動作確認
+#### M14: GitHub Actions release.yml + v0.1.0 タグ ✅ workflow 完了 (commit: TBD)
+- [x] `.github/workflows/release.yml` (tag push → GoReleaser + Homebrew + ghcr.io)
+- [x] actionlint pass、`goreleaser check` pass、既存テスト全 pass、lint 0 issues
+- [ ] `v0.1.0` タグ作成 ← **GitHub remote 設定後にユーザー手動で実施 (本マイルストーンでは扱わない)**
+- 完了条件: workflow 配置完了 / 将来タグ push 時に GitHub Releases へ成果物投稿 + `brew install youyo/tap/x` 動作
+
+**v0.1.0 タグ push 手順 (将来手動実施)**:
+
+GitHub remote (`https://github.com/youyo/x`) を設定後、以下のコマンドで実行する。
+
+```bash
+# 0. 必須 secrets を repository に登録 (Settings > Secrets and variables > Actions)
+#    - HOMEBREW_TAP_GITHUB_TOKEN: youyo/homebrew-tap 宛 PAT (repo scope)
+#    GITHUB_TOKEN は GitHub Actions が自動付与するので登録不要
+
+# 1. リポジトリを GitHub に push (初回のみ)
+git remote add origin https://github.com/youyo/x.git
+git push -u origin main
+
+# 2. v0.1.0 タグを作成・push
+git tag -a v0.1.0 -m "v0.1.0: 初回リリース (CLI v0.1.0)"
+git push origin v0.1.0
+
+# 3. GitHub Actions の `release` ワークフローが走ることを確認
+gh run watch  # または https://github.com/youyo/x/actions
+
+# 4. 完了確認
+gh release view v0.1.0  # 4 platform tarball + checksums.txt
+brew install youyo/tap/x && x version
+docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 version
+```
 
 ### Phase E: MCP コア
 
