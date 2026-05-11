@@ -1,0 +1,156 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+#
+# GoReleaser configuration for x — X (Twitter) API CLI & Remote MCP.
+# See https://goreleaser.com/customization/ for full reference.
+#
+# Local snapshot verification (no upload, no Docker daemon required):
+#   goreleaser release --snapshot --clean --skip docker,docker_manifest
+#
+# Full snapshot (requires Docker daemon + buildx):
+#   goreleaser release --snapshot --clean
+#
+# Real release is invoked by .github/workflows/release.yml on git tag push (M14).
+version: 2
+
+project_name: x
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: x
+    main: ./cmd/x
+    binary: x
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/youyo/x/internal/version.Version={{ .Version }}
+      - -X github.com/youyo/x/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/youyo/x/internal/version.Date={{ .Date }}
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    ids:
+      - x
+    formats: ["tar.gz"]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - README.ja.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*feat[(\w)]*:+.*$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*fix[(\w)]*:+.*$'
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - merge
+
+release:
+  github:
+    owner: youyo
+    name: x
+  draft: false
+  prerelease: auto
+
+# Homebrew Tap publishing.
+# 認証は HOMEBREW_TAP_GITHUB_TOKEN を release.yml で供給する (M14)。
+brews:
+  - name: x
+    repository:
+      owner: youyo
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/youyo/x
+    description: "X (Twitter) API CLI and Remote MCP server"
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    install: |
+      bin.install "x"
+    test: |
+      system "#{bin}/x", "version"
+
+# Docker images: ghcr.io 公開 (multi-arch)
+# release.yml で permissions: packages: write が必要。
+# 既存 Dockerfile は multi-stage で `go build` する形式 (logvalet 流) のため
+# goreleaser が context に渡すバイナリは無視され Docker 内で再ビルドされる。
+# 2x ビルドの非効率は v0.1.0 では許容。将来 kintone 流 (COPY prebuilt) に
+# 最適化する場合は別マイルストーンで Dockerfile をリファクタする。
+dockers:
+  - image_templates:
+      - "ghcr.io/youyo/x:{{ .Version }}-amd64"
+    use: buildx
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/youyo/x"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--build-arg=COMMIT={{ .ShortCommit }}"
+      - "--build-arg=DATE={{ .Date }}"
+  - image_templates:
+      - "ghcr.io/youyo/x:{{ .Version }}-arm64"
+    use: buildx
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/youyo/x"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+      - "--build-arg=VERSION={{ .Version }}"
+      - "--build-arg=COMMIT={{ .ShortCommit }}"
+      - "--build-arg=DATE={{ .Date }}"
+
+docker_manifests:
+  - name_template: "ghcr.io/youyo/x:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/youyo/x:{{ .Version }}-amd64"
+      - "ghcr.io/youyo/x:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/youyo/x:latest"
+    image_templates:
+      - "ghcr.io/youyo/x:{{ .Version }}-amd64"
+      - "ghcr.io/youyo/x:{{ .Version }}-arm64"
