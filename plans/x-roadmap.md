@@ -25,9 +25,9 @@
 
 ## Current Focus
 
-- **マイルストーン**: M9 (CLI `x me`)
-- **直近の完了**: M8 (internal/xapi/likes.go - ListLikedTweets + EachLikedPage + rate-limit aware ページネーション)
-- **次のアクション**: M9 の詳細計画作成と実装
+- **マイルストーン**: M10 (CLI `x liked list` 基本フラグ)
+- **直近の完了**: M9 (CLI `x me` + auth_loader + main.go の exit code 写像)
+- **次のアクション**: M10 の詳細計画作成と実装
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
@@ -111,10 +111,13 @@
 
 ### Phase C: CLI v0.1.0
 
-#### M9: CLI `x me`
-- [ ] `internal/cli/me.go`
-- [ ] JSON / human 出力
-- 完了条件: `x me` で自分の user_id 出力、--no-json で human
+#### M9: CLI `x me` ✅ 完了
+- [x] `internal/cli/me.go` (newMeCmd factory + meClient interface + newMeClient var-swap for test)
+- [x] `internal/cli/auth_loader.go` (LoadCredentialsFromEnvOrFile + ErrCredentialsMissing が xapi.ErrAuthentication を Unwrap)
+- [x] `internal/cli/root.go` (AddCommand(newMeCmd()))
+- [x] `cmd/x/main.go` run() の error → exit code 写像に xapi.ErrAuthentication / ErrPermission / ErrNotFound を追加
+- 完了: JSON / human 出力 (--no-json) で動作、認証情報欠落 → exit 3、401 → exit 3、404 → exit 5。18 新規テスト全 pass、計 118+ テスト、lint 0 issues
+- 留意: env > file は **ファイル単位** 優先順位 (タスク指示準拠、フィールド単位部分上書きは将来 M12 で再評価)。meClient interface + newMeClient 関数変数で httptest baseURL 注入を可能化。`xapi.WithBaseURL` を利用
 
 #### M10: CLI `x liked list` 基本フラグ
 - [ ] `internal/cli/liked.go`

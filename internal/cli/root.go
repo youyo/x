@@ -40,6 +40,7 @@ func NewRootCmd() *cobra.Command {
 	root.SetVersionTemplate("{{.Version}}\n")
 
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newMeCmd())
 	// NOTE: completion サブコマンドは Cobra が自動追加する (HasAvailableSubCommands が真のため)。
 	// NOTE: M3 で root.PersistentFlags().StringP("format","f","json",...) を追加予定。
 	return root

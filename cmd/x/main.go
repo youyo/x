@@ -8,19 +8,21 @@
 //   - 0 = success
 //   - 1 = generic error
 //   - 2 = argument / validation error
-//   - 3 = auth error
-//   - 4 = permission error
-//   - 5 = not found
+//   - 3 = auth error (X API 401 / 認証情報欠落)
+//   - 4 = permission error (X API 403)
+//   - 5 = not found (X API 404)
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/youyo/x/internal/app"
 	"github.com/youyo/x/internal/cli"
+	"github.com/youyo/x/internal/xapi"
 )
 
 // main は os.Exit に exit code を渡す唯一の責務を持つ。
@@ -32,19 +34,34 @@ func main() {
 // run は CLI を実行し、終了コードを int で返す。
 //
 // Cobra の SilenceUsage / SilenceErrors を有効化しているため、エラー時には
-// 本関数で stderr にメッセージを出力する。エラー種別は isArgumentError で判定し、
-// 引数 / フラグエラーは ExitArgumentError、それ以外は ExitGenericError に分類する。
-// M5 以降で X API エラーが入ってくる際は、エラー型 (xapi.AuthError 等) を
-// errors.As で判定し ExitAuthError / ExitPermissionError / ExitNotFoundError へ
-// マッピングを拡張する予定。
+// 本関数で stderr にメッセージを出力する。
+//
+// エラー → exit code 写像 (上から優先):
+//  1. isArgumentError(err) → ExitArgumentError (2): 未知サブコマンド / フラグ
+//  2. errors.Is(err, xapi.ErrAuthentication) → ExitAuthError (3): 401 / 認証情報欠落
+//  3. errors.Is(err, xapi.ErrPermission)     → ExitPermissionError (4): 403
+//  4. errors.Is(err, xapi.ErrNotFound)       → ExitNotFoundError (5): 404
+//  5. fallback                                → ExitGenericError (1)
+//
+// 番兵エラーは xapi 層 (M6) で定義されており、CLI 層の ErrCredentialsMissing も
+// xapi.ErrAuthentication を Unwrap で内包しているため上記 2. の経路で exit 3 に
+// 写像される (plans/x-m09-cli-me.md D-1)。
 func run() int {
 	root := cli.NewRootCmd()
 	if err := root.ExecuteContext(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
-		if isArgumentError(err) {
+		switch {
+		case isArgumentError(err):
 			return app.ExitArgumentError
+		case errors.Is(err, xapi.ErrAuthentication):
+			return app.ExitAuthError
+		case errors.Is(err, xapi.ErrPermission):
+			return app.ExitPermissionError
+		case errors.Is(err, xapi.ErrNotFound):
+			return app.ExitNotFoundError
+		default:
+			return app.ExitGenericError
 		}
-		return app.ExitGenericError
 	}
 	return app.ExitSuccess
 }
