@@ -7,13 +7,17 @@
 //   - apikey:  Bearer token を共有シークレットと定数時間比較する。CI / Routine
 //     からの呼び出しを想定する。
 //   - idproxy: OIDC ベースの session 認証。本番想定。memory / sqlite / redis /
-//     dynamodb の 4 store backend をサポートする計画。
+//     dynamodb の 4 store backend をサポートする計画。M21 までで memory / sqlite を
+//     実装済み、redis / dynamodb は M22–M23 で順次追加する。
 //
 // 本パッケージは [Middleware] interface と [New] ファクトリを公開し、モード値は
 // [Mode] 型の定数 ([ModeNone] / [ModeAPIKey] / [ModeIDProxy]) として表現する。
 //
-// M20 までで 3 モード全実装済み。ただし [ModeIDProxy] については memory store のみを
-// M20 で実装し、sqlite / redis / dynamodb は M21–M23 で順次追加する。また、
+// M21 までで 3 モード全実装済み。[ModeIDProxy] については M20 で memory store、
+// M21 で sqlite store ([NewSQLiteStore]) を実装し、redis / dynamodb は M22–M23 で
+// 順次追加する。sqlite store は POSIX 環境において起動時にメイン DB ファイルおよび
+// WAL サイドカー (`-wal` / `-shm`) を 0600 へ chmod する (best-effort、Windows では
+// 静かに無視)。また、
 // 現状の idproxy 統合は `idproxy.Config.OAuth = nil` 固定で **ブラウザ cookie session
 // 認証のみ** を提供し、OAuth 2.1 AS / Bearer JWT 検証は未対応である (機械実行は
 // [ModeAPIKey] を利用すること)。サポート外のモードに対しては [ErrUnsupportedMode]
@@ -47,4 +51,17 @@
 //	)
 //	if err != nil { /* ErrIDProxyConfigInvalid 等を処理 */ }
 //	srv := http.NewServer(mcp, http.WithHandlerMiddleware(mw.Wrap))
+//
+//	// idproxy モード (sqlite store, 単一ノード永続化)
+//	store, err := authgate.NewSQLiteStore(os.Getenv("SQLITE_PATH"))
+//	if err != nil { /* ErrSQLitePathRequired 等を処理 */ }
+//	defer store.Close()
+//	mw, err = authgate.New(authgate.ModeIDProxy,
+//	    authgate.WithOIDCIssuer(os.Getenv("OIDC_ISSUER")),
+//	    authgate.WithOIDCClientID(os.Getenv("OIDC_CLIENT_ID")),
+//	    authgate.WithOIDCClientSecret(os.Getenv("OIDC_CLIENT_SECRET")),
+//	    authgate.WithCookieSecret(os.Getenv("COOKIE_SECRET")),
+//	    authgate.WithExternalURL(os.Getenv("EXTERNAL_URL")),
+//	    authgate.WithIDProxyStore(store),
+//	)
 package authgate
