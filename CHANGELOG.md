@@ -4,6 +4,73 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-12
+
+Remote MCP サーバーをリリース。Claude Code Routines や他の MCP クライアントから X (旧 Twitter) API v2 の Liked Posts を読み出せる Streamable HTTP サーバーが `x mcp` サブコマンドとして提供される。Lambda Web Adapter での AWS Lambda デプロイ想定 (実デプロイサンプルは v0.3.0)。
+
+### Added
+
+#### MCP サブコマンド
+- `x mcp` — Streamable HTTP MCP サーバーを起動 (M24):
+  - `--host` (default `127.0.0.1`, env: `X_MCP_HOST`)
+  - `--port` (default `8080`, env: `X_MCP_PORT`)
+  - `--path` (default `/mcp`, env: `X_MCP_PATH`)
+  - `--auth idproxy|apikey|none` (default `idproxy`, env: `X_MCP_AUTH`)
+  - `--apikey-env <name>` (default `X_MCP_API_KEY`) — apikey モード時に shared secret を保持する env 変数名
+  - SIGINT/SIGTERM 受信で graceful shutdown
+  - MCP モードは credentials.toml を一切読まず、シークレットは環境変数のみから取得 (spec §11 不変条件)
+
+#### MCP Tools (mark3labs/mcp-go Streamable HTTP)
+- `get_user_me` — 自分の `user_id` / `username` / `name` を返す (M17)
+- `get_liked_tweets` — Liked Posts を取得 (M18):
+  - 入力: `user_id` / `start_time` / `end_time` / `since_jst` / `yesterday_jst` / `max_results` / `all` / `max_pages` / `tweet_fields` / `expansions` / `user_fields`
+  - `all=true` で next_token を自動辿り、rate-limit aware に集約結果を一括返却
+  - `yesterday_jst > since_jst > start/end_time` の優先順位を CLI と統一
+
+#### 認証 (authgate)
+- `none` モード — 認証なし (ローカル開発専用, M16)
+- `apikey` モード — Bearer token、constant-time 比較 (M19)
+- `idproxy` モード — OIDC + cookie session (M20-M23)
+- idproxy ストアバックエンド 4 種 (`STORE_BACKEND` で切替):
+  - `memory` (default, テスト/一時用途, M20)
+  - `sqlite` (`SQLITE_PATH`, `modernc.org/sqlite` pure Go, ローカル開発, M21)
+  - `redis` (`REDIS_URL`, `go-redis/v9`, 軽量サーバー, M22)
+  - `dynamodb` (`DYNAMODB_TABLE_NAME` / `AWS_REGION`, `aws-sdk-go-v2`, Lambda マルチコンテナ, M23)
+
+#### Transport
+- Streamable HTTP サーバー (`internal/transport/http`, M15)
+- `GET /healthz` — LWA / Lambda 死活確認用 (`200 ok\n`, 認証 middleware バイパス, M16)
+- graceful shutdown (ListenAndServe 並行起動 → ctx 終了で `Shutdown` 呼び出し)
+
+### 環境変数 (新規)
+
+| 名前 | 用途 |
+|---|---|
+| `X_MCP_HOST` | MCP bind host |
+| `X_MCP_PORT` | MCP bind port |
+| `X_MCP_PATH` | MCP エンドポイント prefix |
+| `X_MCP_AUTH` | 認証モード (`idproxy` / `apikey` / `none`) |
+| `X_MCP_API_KEY` | apikey モードの shared secret 値 |
+| `OIDC_ISSUER` | idproxy OIDC Issuer (カンマ区切りで複数可) |
+| `OIDC_CLIENT_ID` | idproxy OIDC Client ID (カンマ区切り) |
+| `OIDC_CLIENT_SECRET` | idproxy OIDC Client Secret |
+| `COOKIE_SECRET` | idproxy セッション暗号 (hex 32B+) |
+| `EXTERNAL_URL` | idproxy 外部 URL |
+| `STORE_BACKEND` | idproxy ストア (`memory` / `sqlite` / `redis` / `dynamodb`) |
+| `SQLITE_PATH` | sqlite DB ファイルパス |
+| `REDIS_URL` | Redis 接続 URL |
+| `DYNAMODB_TABLE_NAME` | DynamoDB テーブル名 |
+| `AWS_REGION` | AWS リージョン (Lambda / dynamodb 時) |
+
+### Security
+- MCP モードはシークレットを環境変数のみから読み込み (Lambda 不変性前提、`credentials.toml` を一切読まない)
+- apikey モードの shared secret は `subtle.ConstantTimeCompare` で比較
+- `/healthz` は middleware バイパスだが、ペイロードは固定文字列のみ (情報漏洩なし)
+
+### Compatibility
+- v0.1.0 の CLI 機能は完全後方互換 (`x version` / `x me` / `x liked list` / `x configure` / `x completion`)
+- 新規追加された `x mcp` サブコマンドは独立しており既存ユーザーへの影響なし
+
 ## [0.1.0] - 2026-05-12
 
 初回リリース。X (旧 Twitter) API v2 の Liked Posts をローカル CLI から取得できる v0.1.0 を公開する。MCP サーバー / Lambda 配布は v0.2.0 以降で対応予定。
@@ -49,5 +116,6 @@
 - 起動時に credentials.toml のパーミッションを検査し `0600` 以外は警告 (POSIX のみ)
 - credentials.toml の書き換えは tmp + rename による原子置換 (`internal/config/credentials.go`)
 
-[Unreleased]: https://github.com/youyo/x/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/youyo/x/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/youyo/x/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/youyo/x/releases/tag/v0.1.0

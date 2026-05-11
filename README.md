@@ -9,16 +9,16 @@ Read this in: English | [日本語](README.ja.md)
 
 A single-binary Go CLI for working with the X (formerly Twitter) API v2 — designed as a building block for automating "yesterday's Liked posts → Backlog tickets" workflows via Claude Code Routines.
 
-The design principle is **"CLI is the core, MCP is a thin wrapper"**. Today, only the CLI is shipped (`v0.1.0`); the Remote MCP server and AWS Lambda distribution are scheduled for later releases.
+The design principle is **"CLI is the core, MCP is a thin wrapper"**. The Remote MCP server is now available in `v0.2.0`; the AWS Lambda deployment sample is scheduled for `v0.3.0`.
 
 ## Status
 
-This is **`v0.1.0` — CLI only**. The following items are planned:
+`v0.2.0` ships the **Remote MCP server**. Release history:
 
 | Version | Scope |
 |---------|-------|
-| `v0.1.0` (this release) | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
-| `v0.2.0` (planned) | Remote MCP server (`x mcp --auth idproxy\|apikey\|none`) with `get_user_me` and `get_liked_tweets` tools |
+| `v0.1.0` | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
+| `v0.2.0` (this release) | Remote MCP server (`x mcp --auth idproxy\|apikey\|none`) with `get_user_me` and `get_liked_tweets` tools, plus four `idproxy` store backends (memory / sqlite / redis / dynamodb) |
 | `v0.3.0` (planned) | `examples/lambroll/` deployment sample + Claude Code Routines prompt template |
 
 See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specification.
@@ -32,6 +32,12 @@ See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specific
   - NDJSON streaming (`--ndjson`) for piping into other tools
   - Customizable `tweet.fields` / `expansions` / `user.fields`
 - **`x configure`** — Interactive setup of XDG-compliant config + credentials files
+- **`x mcp`** — Start a Streamable HTTP MCP server (Claude Code Routines / MCP client connectivity)
+  - Three auth modes: `none` (local dev only), `apikey` (Bearer token), `idproxy` (OIDC + cookie session)
+  - Four `idproxy` store backends: `memory` / `sqlite` / `redis` / `dynamodb`
+  - MCP tools: `get_user_me`, `get_liked_tweets`
+  - `GET /healthz` for Lambda Web Adapter / k8s liveness probes
+  - Graceful shutdown on SIGINT/SIGTERM
 - **`x version`** — Build information (version / commit / build date)
 - **`x completion`** — Shell completion for bash / zsh / fish / powershell (Cobra built-in)
 - **OAuth 1.0a** static token authentication (user context)
@@ -40,7 +46,7 @@ See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specific
 
 ## Installation
 
-### Homebrew (planned, available after `v0.1.0` is published)
+### Homebrew
 
 ```bash
 brew install youyo/tap/x
@@ -121,6 +127,68 @@ Or as NDJSON for piping:
 x liked list --yesterday-jst --all --ndjson | jq -r '.id + " " + .text'
 ```
 
+## Quick Start (MCP server)
+
+The `x mcp` subcommand starts a [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) MCP server. Three auth modes are available. In MCP mode, **all secrets must come from environment variables** — `credentials.toml` is never read.
+
+Endpoints (regardless of auth mode):
+
+- `POST /mcp` — MCP Streamable HTTP entry point (auth applies)
+- `GET /healthz` — liveness probe (always returns `200 ok`, bypasses auth)
+
+### Local development (`--auth none`)
+
+```bash
+X_API_KEY=... X_API_SECRET=... \
+X_ACCESS_TOKEN=... X_ACCESS_TOKEN_SECRET=... \
+  x mcp --auth none --host 127.0.0.1 --port 8080
+```
+
+### Shared API Key (`--auth apikey`)
+
+```bash
+X_API_KEY=... X_API_SECRET=... \
+X_ACCESS_TOKEN=... X_ACCESS_TOKEN_SECRET=... \
+X_MCP_API_KEY=$(openssl rand -hex 32) \
+  x mcp --auth apikey --host 0.0.0.0 --port 8080
+```
+
+Clients must send `Authorization: Bearer ${X_MCP_API_KEY}`. The comparison is constant-time (`subtle.ConstantTimeCompare`). The `--apikey-env` flag selects **which environment variable name** holds the shared secret (default: `X_MCP_API_KEY`).
+
+### OIDC + cookie session (`--auth idproxy`, default)
+
+Uses [`github.com/youyo/idproxy`](https://github.com/youyo/idproxy). Choose a persistent store backend via `STORE_BACKEND`:
+
+```bash
+X_API_KEY=... X_API_SECRET=... \
+X_ACCESS_TOKEN=... X_ACCESS_TOKEN_SECRET=... \
+OIDC_ISSUER=https://accounts.google.com,https://login.microsoftonline.com/<tenant>/v2.0 \
+OIDC_CLIENT_ID=<google-client-id>,<entra-client-id> \
+OIDC_CLIENT_SECRET=<google-client-secret> \
+COOKIE_SECRET=$(openssl rand -hex 32) \
+EXTERNAL_URL=https://x-mcp.example.com \
+STORE_BACKEND=dynamodb \
+DYNAMODB_TABLE_NAME=x-mcp-idproxy \
+AWS_REGION=ap-northeast-1 \
+  x mcp --auth idproxy --host 0.0.0.0 --port 8080
+```
+
+Store backends:
+
+| `STORE_BACKEND` | Required env vars | Use case |
+|---|---|---|
+| `memory` (default) | — | unit tests, ephemeral local dev |
+| `sqlite` | `SQLITE_PATH` (default `${XDG_DATA_HOME:-~/.local/share}/x/idproxy.db`) | single-process local dev (`modernc.org/sqlite`, pure Go) |
+| `redis` | `REDIS_URL` (e.g. `redis://localhost:6379/0`) | lightweight servers, native TTL (`go-redis/v9`) |
+| `dynamodb` | `DYNAMODB_TABLE_NAME`, `AWS_REGION` | Lambda multi-container, `ConsistentRead` (`aws-sdk-go-v2`) |
+
+### Available MCP tools
+
+| Tool | Description |
+|---|---|
+| `get_user_me` | Returns `{ user_id, username, name }` for the OAuth 1.0a user. |
+| `get_liked_tweets` | Returns Liked posts with full pagination (`all=true`, `max_pages`, rate-limit aware). Accepts `user_id`, `start_time` / `end_time`, `since_jst`, `yesterday_jst`, `max_results`, `tweet_fields`, `expansions`, `user_fields`. JST helpers take precedence: `yesterday_jst > since_jst > start_time/end_time` (matches the CLI). |
+
 ## Configuration
 
 ### File layout (XDG Base Directory Specification)
@@ -141,6 +209,14 @@ CLI mode (`x me`, `x liked list`, `x configure`):
 3. `credentials.toml` (secrets only)
 4. `config.toml` (non-secret only)
 5. Built-in default
+
+MCP mode (`x mcp`):
+
+1. CLI flag (`--host` / `--port` / `--path` / `--auth` / `--apikey-env`)
+2. Environment variable (including secrets)
+3. Built-in default
+
+**MCP mode never reads `config.toml` or `credentials.toml`** — all secrets must come from environment variables. This makes Lambda / container deployments deterministic.
 
 ### `config.toml` example
 
@@ -168,7 +244,7 @@ access_token        = "..."
 access_token_secret = "..."
 ```
 
-### Environment variables
+### Environment variables (X API, CLI / MCP common)
 
 | Name | Purpose | Required |
 |------|---------|----------|
@@ -176,10 +252,31 @@ access_token_secret = "..."
 | `X_API_SECRET` | OAuth 1.0a consumer secret | Yes |
 | `X_ACCESS_TOKEN` | OAuth 1.0a access token | Yes |
 | `X_ACCESS_TOKEN_SECRET` | OAuth 1.0a access token secret | Yes |
-| `XDG_CONFIG_HOME` | Override config dir | No |
-| `XDG_DATA_HOME` | Override data dir | No |
+| `XDG_CONFIG_HOME` | Override config dir (CLI only) | No |
+| `XDG_DATA_HOME` | Override data dir (CLI only) | No |
 
 When set, environment variables take precedence over file-based credentials.
+
+### MCP server environment variables (v0.2.0+, MCP mode only)
+
+| Name | Purpose | Default / Required |
+|------|---------|--------------------|
+| `X_MCP_HOST` | bind host | `127.0.0.1` |
+| `X_MCP_PORT` | bind port | `8080` |
+| `X_MCP_PATH` | MCP endpoint prefix | `/mcp` |
+| `X_MCP_AUTH` | `idproxy` / `apikey` / `none` | `idproxy` |
+| `X_MCP_API_KEY` | apikey-mode shared secret **value** (compared with `Authorization: Bearer ...`) | required when `--auth apikey` |
+| `OIDC_ISSUER` | idproxy OIDC issuer (comma-separated, multiple OK) | required when `--auth idproxy` |
+| `OIDC_CLIENT_ID` | idproxy OIDC client ID (comma-separated, aligned with `OIDC_ISSUER`) | required when `--auth idproxy` |
+| `OIDC_CLIENT_SECRET` | idproxy OIDC client secret | issuer-dependent |
+| `COOKIE_SECRET` | idproxy session encryption key (hex, 32B+) | required when `--auth idproxy` |
+| `EXTERNAL_URL` | idproxy external URL | required when `--auth idproxy` |
+| `STORE_BACKEND` | `memory` / `sqlite` / `redis` / `dynamodb` | `memory` |
+| `SQLITE_PATH` | sqlite DB file path | `${XDG_DATA_HOME:-~/.local/share}/x/idproxy.db` |
+| `REDIS_URL` | Redis connection URL | required when `STORE_BACKEND=redis` |
+| `DYNAMODB_TABLE_NAME` | DynamoDB table name | required when `STORE_BACKEND=dynamodb` |
+| `AWS_REGION` | AWS region | required on Lambda / when `STORE_BACKEND=dynamodb` |
+| `LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
 
 ## Obtaining X API credentials
 
@@ -205,13 +302,9 @@ When set, environment variables take precedence over file-based credentials.
 
 ## Roadmap
 
-- **`v0.2.0`** — Remote MCP server: `x mcp --auth idproxy\|apikey\|none --host 0.0.0.0 --port 8080`
-  - MCP tools: `get_user_me`, `get_liked_tweets`
-  - Built on [`mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) (Streamable HTTP)
-  - `idproxy` middleware with four pluggable store backends (memory / sqlite / redis / dynamodb)
 - **`v0.3.0`** — `examples/lambroll/`: AWS Lambda + Function URL + Lambda Web Adapter deployment sample, plus Claude Code Routines prompt template (`docs/routine-prompt.md`)
 
-See [`plans/x-roadmap.md`](plans/x-roadmap.md) for the full milestone breakdown.
+See [`plans/x-roadmap.md`](plans/x-roadmap.md) for the full milestone breakdown and [`CHANGELOG.md`](CHANGELOG.md) for released versions.
 
 ## Development
 
@@ -234,6 +327,27 @@ goreleaser release --snapshot --clean --skip docker,docker_manifest
 ```
 
 Continuous integration runs lint + test + build + docker on every push and PR to `main`. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+### Release procedure (maintainer)
+
+Releases are tag-driven. Once a `vX.Y.Z` tag is pushed, [`.github/workflows/release.yml`](.github/workflows/release.yml) runs GoReleaser and publishes the Homebrew formula + Docker images automatically.
+
+```bash
+git checkout main && git pull
+git status                                # working tree must be clean
+grep "^## \[X.Y.Z\]" CHANGELOG.md         # CHANGELOG must already have the new section
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The release workflow then:
+
+- runs `goreleaser` (darwin / linux × amd64 / arm64 tarballs + checksums)
+- publishes GitHub Releases assets
+- updates the `youyo/homebrew-tap` formula
+- pushes Docker images to `ghcr.io/youyo/x:X.Y.Z` and `:latest`
+
+For `v0.2.0`, the tag has not been pushed yet from this repository; the procedure above documents the intent.
 
 ## Contributing
 

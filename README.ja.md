@@ -9,16 +9,16 @@ Read this in: [English](README.md) | 日本語
 
 X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude Code Routines を使った「前日に Like した Post → Backlog 課題化」自動化基盤の土台として設計されている。
 
-設計方針は **「CLI がコア、MCP はその薄いラッパー」**。`v0.1.0` では CLI のみを提供し、Remote MCP サーバーと AWS Lambda 配布は後続リリースで対応する。
+設計方針は **「CLI がコア、MCP はその薄いラッパー」**。`v0.2.0` から Remote MCP サーバーが利用可能になった。AWS Lambda デプロイサンプルは `v0.3.0` で対応予定。
 
 ## ステータス
 
-本リリースは **`v0.1.0` — CLI のみ** である。今後の予定:
+`v0.2.0` で **Remote MCP サーバー** をリリース。リリース履歴:
 
 | バージョン | スコープ |
 |---------|-------|
-| `v0.1.0` (本リリース) | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
-| `v0.2.0` (予定) | Remote MCP サーバー (`x mcp --auth idproxy\|apikey\|none`) と `get_user_me` / `get_liked_tweets` tools |
+| `v0.1.0` | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
+| `v0.2.0` (本リリース) | Remote MCP サーバー (`x mcp --auth idproxy\|apikey\|none`) と `get_user_me` / `get_liked_tweets` tools、加えて 4 種類の `idproxy` ストアバックエンド (memory / sqlite / redis / dynamodb) |
 | `v0.3.0` (予定) | `examples/lambroll/` AWS Lambda デプロイサンプル + Claude Code Routines プロンプト雛形 |
 
 詳細仕様は [`docs/specs/x-spec.md`](docs/specs/x-spec.md) を参照。
@@ -32,6 +32,12 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
   - NDJSON ストリーミング出力 (`--ndjson`) — 他ツールへのパイプ向け
   - `tweet.fields` / `expansions` / `user.fields` のカスタマイズ
 - **`x configure`** — 対話形式で XDG 準拠の設定 / 認証情報ファイルを生成
+- **`x mcp`** — Streamable HTTP MCP サーバーを起動 (Claude Code Routines / MCP クライアント接続用)
+  - 3 種類の認証モード: `none` (ローカル開発専用) / `apikey` (Bearer token) / `idproxy` (OIDC + cookie session)
+  - 4 種類の `idproxy` ストアバックエンド: `memory` / `sqlite` / `redis` / `dynamodb`
+  - MCP tools: `get_user_me`, `get_liked_tweets`
+  - `GET /healthz` で Lambda Web Adapter / k8s liveness probe に対応
+  - SIGINT/SIGTERM 受信で graceful shutdown
 - **`x version`** — ビルド情報 (バージョン / コミット / ビルド日時) の表示
 - **`x completion`** — bash / zsh / fish / powershell 4 シェルの補完スクリプト生成 (Cobra 標準)
 - **OAuth 1.0a** 静的トークン認証 (user context)
@@ -40,7 +46,7 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 
 ## インストール
 
-### Homebrew (`v0.1.0` リリース後に利用可能予定)
+### Homebrew
 
 ```bash
 brew install youyo/tap/x
@@ -121,6 +127,68 @@ NDJSON でパイプしたい場合:
 x liked list --yesterday-jst --all --ndjson | jq -r '.id + " " + .text'
 ```
 
+## クイックスタート (MCP サーバー)
+
+`x mcp` サブコマンドは [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) MCP サーバーを起動する。3 種類の認証モードに対応する。**MCP モードではシークレットは必ず環境変数から読み込み**、`credentials.toml` は一切読まない。
+
+エンドポイント (認証モードに依存しない):
+
+- `POST /mcp` — MCP Streamable HTTP エントリポイント (認証あり)
+- `GET /healthz` — liveness probe (常に `200 ok` を返却、認証バイパス)
+
+### ローカル開発 (`--auth none`)
+
+```bash
+X_API_KEY=... X_API_SECRET=... \
+X_ACCESS_TOKEN=... X_ACCESS_TOKEN_SECRET=... \
+  x mcp --auth none --host 127.0.0.1 --port 8080
+```
+
+### 共有 API Key (`--auth apikey`)
+
+```bash
+X_API_KEY=... X_API_SECRET=... \
+X_ACCESS_TOKEN=... X_ACCESS_TOKEN_SECRET=... \
+X_MCP_API_KEY=$(openssl rand -hex 32) \
+  x mcp --auth apikey --host 0.0.0.0 --port 8080
+```
+
+クライアントは `Authorization: Bearer ${X_MCP_API_KEY}` を送る必要がある。比較は constant-time (`subtle.ConstantTimeCompare`)。`--apikey-env` フラグは shared secret を保持する **環境変数名** を指定する (default: `X_MCP_API_KEY`)。
+
+### OIDC + cookie session (`--auth idproxy`, デフォルト)
+
+[`github.com/youyo/idproxy`](https://github.com/youyo/idproxy) を利用する。永続化バックエンドは `STORE_BACKEND` で選択する:
+
+```bash
+X_API_KEY=... X_API_SECRET=... \
+X_ACCESS_TOKEN=... X_ACCESS_TOKEN_SECRET=... \
+OIDC_ISSUER=https://accounts.google.com,https://login.microsoftonline.com/<tenant>/v2.0 \
+OIDC_CLIENT_ID=<google-client-id>,<entra-client-id> \
+OIDC_CLIENT_SECRET=<google-client-secret> \
+COOKIE_SECRET=$(openssl rand -hex 32) \
+EXTERNAL_URL=https://x-mcp.example.com \
+STORE_BACKEND=dynamodb \
+DYNAMODB_TABLE_NAME=x-mcp-idproxy \
+AWS_REGION=ap-northeast-1 \
+  x mcp --auth idproxy --host 0.0.0.0 --port 8080
+```
+
+ストアバックエンド:
+
+| `STORE_BACKEND` | 必須環境変数 | 用途 |
+|---|---|---|
+| `memory` (default) | — | 単体テスト・一時的なローカル開発 |
+| `sqlite` | `SQLITE_PATH` (default `${XDG_DATA_HOME:-~/.local/share}/x/idproxy.db`) | 単一プロセスのローカル開発 (`modernc.org/sqlite`, pure Go) |
+| `redis` | `REDIS_URL` (例: `redis://localhost:6379/0`) | 軽量サーバー、TTL ネイティブ (`go-redis/v9`) |
+| `dynamodb` | `DYNAMODB_TABLE_NAME`, `AWS_REGION` | Lambda マルチコンテナ、`ConsistentRead` (`aws-sdk-go-v2`) |
+
+### 利用可能な MCP tools
+
+| Tool | 説明 |
+|---|---|
+| `get_user_me` | OAuth 1.0a ユーザーの `{ user_id, username, name }` を返す。 |
+| `get_liked_tweets` | Liked Posts を全ページング (`all=true`, `max_pages`, rate-limit aware) 込みで返す。`user_id` / `start_time` / `end_time` / `since_jst` / `yesterday_jst` / `max_results` / `tweet_fields` / `expansions` / `user_fields` を受け取る。JST ヘルパの優先順位は `yesterday_jst > since_jst > start_time/end_time` (CLI と統一)。 |
+
 ## 設定
 
 ### ファイル配置 (XDG Base Directory Specification 準拠)
@@ -141,6 +209,14 @@ CLI モード (`x me`, `x liked list`, `x configure`):
 3. `credentials.toml` (シークレットのみ)
 4. `config.toml` (非機密のみ)
 5. 組み込みデフォルト
+
+MCP モード (`x mcp`):
+
+1. CLI フラグ (`--host` / `--port` / `--path` / `--auth` / `--apikey-env`)
+2. 環境変数 (シークレット含む)
+3. 組み込みデフォルト
+
+**MCP モードは `config.toml` も `credentials.toml` も一切読まない** — シークレットは必ず環境変数経由で渡す。Lambda / コンテナデプロイの決定性を担保するための不変条件である。
 
 ### `config.toml` 例
 
@@ -168,7 +244,7 @@ access_token        = "..."
 access_token_secret = "..."
 ```
 
-### 環境変数
+### 環境変数 (X API、CLI / MCP 共通)
 
 | 名前 | 用途 | 必須 |
 |------|---------|------|
@@ -176,10 +252,31 @@ access_token_secret = "..."
 | `X_API_SECRET` | OAuth 1.0a consumer secret | はい |
 | `X_ACCESS_TOKEN` | OAuth 1.0a access token | はい |
 | `X_ACCESS_TOKEN_SECRET` | OAuth 1.0a access token secret | はい |
-| `XDG_CONFIG_HOME` | 設定ディレクトリ上書き | いいえ |
-| `XDG_DATA_HOME` | データディレクトリ上書き | いいえ |
+| `XDG_CONFIG_HOME` | 設定ディレクトリ上書き (CLI のみ) | いいえ |
+| `XDG_DATA_HOME` | データディレクトリ上書き (CLI のみ) | いいえ |
 
 環境変数が指定されている場合、ファイルベースのクレデンシャルより優先される。
+
+### MCP サーバー環境変数 (v0.2.0+、MCP モード専用)
+
+| 名前 | 用途 | デフォルト / 必須 |
+|------|---------|--------------------|
+| `X_MCP_HOST` | bind host | `127.0.0.1` |
+| `X_MCP_PORT` | bind port | `8080` |
+| `X_MCP_PATH` | MCP エンドポイント prefix | `/mcp` |
+| `X_MCP_AUTH` | `idproxy` / `apikey` / `none` | `idproxy` |
+| `X_MCP_API_KEY` | apikey モードの shared secret **値** (`Authorization: Bearer ...` と比較) | `--auth apikey` 時必須 |
+| `OIDC_ISSUER` | idproxy OIDC issuer (カンマ区切りで複数可) | `--auth idproxy` 時必須 |
+| `OIDC_CLIENT_ID` | idproxy OIDC client ID (`OIDC_ISSUER` と整合させてカンマ区切り) | `--auth idproxy` 時必須 |
+| `OIDC_CLIENT_SECRET` | idproxy OIDC client secret | issuer 依存 |
+| `COOKIE_SECRET` | idproxy セッション暗号鍵 (hex, 32B+) | `--auth idproxy` 時必須 |
+| `EXTERNAL_URL` | idproxy 外部 URL | `--auth idproxy` 時必須 |
+| `STORE_BACKEND` | `memory` / `sqlite` / `redis` / `dynamodb` | `memory` |
+| `SQLITE_PATH` | sqlite DB ファイルパス | `${XDG_DATA_HOME:-~/.local/share}/x/idproxy.db` |
+| `REDIS_URL` | Redis 接続 URL | `STORE_BACKEND=redis` 時必須 |
+| `DYNAMODB_TABLE_NAME` | DynamoDB テーブル名 | `STORE_BACKEND=dynamodb` 時必須 |
+| `AWS_REGION` | AWS リージョン | Lambda / `STORE_BACKEND=dynamodb` 時必須 |
+| `LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
 
 ## X API クレデンシャルの取得方法
 
@@ -205,13 +302,9 @@ access_token_secret = "..."
 
 ## ロードマップ
 
-- **`v0.2.0`** — Remote MCP サーバー: `x mcp --auth idproxy\|apikey\|none --host 0.0.0.0 --port 8080`
-  - MCP tools: `get_user_me`, `get_liked_tweets`
-  - [`mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) (Streamable HTTP) で実装
-  - `idproxy` ミドルウェア + 4 種類のストアバックエンド (memory / sqlite / redis / dynamodb) を切り替え可能
 - **`v0.3.0`** — `examples/lambroll/`: AWS Lambda + Function URL + Lambda Web Adapter デプロイサンプル + Claude Code Routines プロンプト雛形 (`docs/routine-prompt.md`)
 
-マイルストーン分解は [`plans/x-roadmap.md`](plans/x-roadmap.md) を参照。
+マイルストーン分解は [`plans/x-roadmap.md`](plans/x-roadmap.md) を、リリース履歴は [`CHANGELOG.md`](CHANGELOG.md) を参照。
 
 ## 開発
 
@@ -234,6 +327,27 @@ goreleaser release --snapshot --clean --skip docker,docker_manifest
 ```
 
 CI は `main` への push および PR ごとに lint / test / build / docker を実行する。詳細は [`.github/workflows/ci.yml`](.github/workflows/ci.yml) を参照。
+
+### リリース手順 (メンテナ向け)
+
+リリースはタグ駆動。`vX.Y.Z` タグが push されると [`.github/workflows/release.yml`](.github/workflows/release.yml) が GoReleaser を実行し、Homebrew formula と Docker イメージを自動公開する。
+
+```bash
+git checkout main && git pull
+git status                                # working tree は clean であること
+grep "^## \[X.Y.Z\]" CHANGELOG.md         # CHANGELOG に対応セクションがあることを確認
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+リリースワークフローは続けて以下を実行する:
+
+- `goreleaser` (darwin / linux × amd64 / arm64 の tarball + checksums)
+- GitHub Releases アセットの公開
+- `youyo/homebrew-tap` formula の更新
+- `ghcr.io/youyo/x:X.Y.Z` / `:latest` への Docker イメージ push
+
+`v0.2.0` については本リポジトリからまだタグを push していない。上記手順はその意図を文書化したもの。
 
 ## コントリビュート
 
