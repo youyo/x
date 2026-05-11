@@ -67,12 +67,12 @@
 - 完了: ローカルで lint 0 issues / 25 テスト pass / docker build 成功 (11.7MB) / `x:dev version` JSON 出力動作 / `--build-arg` ldflags 注入動作
 - TDD 観点: M3 以降のテスト追加時に常時 lint+race+coverage を強制
 
-#### M3: `internal/config` XDG loader (非機密設定のみ)
-- [ ] `internal/config/xdg.go` (XDG_CONFIG_HOME / XDG_DATA_HOME 解決)
-- [ ] `internal/config/loader_cli.go` (config.toml 読み込み, BurntSushi/toml)
-- [ ] `internal/config/config.go` (CLIConfig 型定義)
-- 完了条件: `[cli]` / `[liked]` セクションを読み込み、env override も動作
-- TDD: シェルでない一時ディレクトリで XDG_CONFIG_HOME を上書きする table-driven テスト
+#### M3: `internal/config` XDG loader (非機密設定のみ) ✅ 完了 (commit: 2b2a804)
+- [x] `internal/config/xdg.go` (Dir() / DataDir() / DefaultCLIConfigPath() + ErrHomeNotResolved)
+- [x] `internal/config/config.go` (CLIConfig + CLISection + LikedSection + DefaultCLIConfig())
+- [x] `internal/config/loader_cli.go` (LoadCLI(path) + applyDefaults ゼロ値補完)
+- 完了: BurntSushi/toml v1.6.0 追加、16 テストケース pass、計 41 テスト全 pass、lint 0 issues
+- TDD: t.Setenv + t.TempDir() で XDG パスを差し替えるテーブル駆動テスト
 
 #### M4: `internal/config` credentials.toml + guard
 - [ ] `internal/config/credentials.go` (perm 0600 強制、R/W)
