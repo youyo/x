@@ -25,9 +25,10 @@
 
 ## Current Focus
 
-- **マイルストーン**: M16 (authgate 基盤 + none モード)
-- **直近の完了**: M15 (`internal/mcp/` + `internal/transport/http/` 雛形追加、mark3labs/mcp-go v0.52.0 導入)
-- **次のアクション**: M16 の詳細計画作成と実装 (`internal/authgate/gate.go` + `none.go`)
+- **マイルストーン**: M17 (MCP tool `get_user_me`) — ⚠️ Anthropic クォータ制限で中断、朝 5 時 (Asia/Tokyo) 以降に再開
+- **直近の完了**: M16 (authgate 基盤 + none モード + /healthz + WithHandlerMiddleware Option, commit: 12efddb)
+- **次のアクション**: クォータ復活後に `/devflow:cycle` 再開、または `/devflow:implement M17` 単独実行
+- **進捗**: 16/28 マイルストーン完了 (57%) — Phase A-D 完了、Phase E 途中
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
