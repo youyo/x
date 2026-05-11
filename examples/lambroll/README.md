@@ -312,4 +312,5 @@ aws iam delete-role --role-name x-mcp-lambda-role
 
 - リポジトリ README: [`../../README.md`](../../README.md)
 - 仕様書: [`../../docs/specs/x-spec.md`](../../docs/specs/x-spec.md)
-- Claude Code Routines 用プロンプト雛形 (M28 で追加予定): `../../docs/routine-prompt.md`
+- X API v2 リファレンス: [`../../docs/x-api.md`](../../docs/x-api.md)
+- Claude Code Routines 用プロンプト雛形: [`../../docs/routine-prompt.md`](../../docs/routine-prompt.md)

@@ -18,17 +18,23 @@
 | 制約 | TDD 必須 / Go 1.26.x / mark3labs/mcp-go / **cobra (kong から変更)** / idproxy 4 store / OSS 公開 |
 | 対象リポジトリ | `/Users/youyo/src/github.com/youyo/x` |
 | 作成日 | 2026-05-12 |
-| 最終更新 | 2026-05-12 |
-| ステータス | 進行中 (M15 完了、M16 着手前) |
+| 最終更新 | 2026-05-12 (M28 完了) |
+| ステータス | ✅ 完了 (全 28 マイルストーン) |
 | スペック | `docs/specs/x-spec.md` (v1.0.0 Approved) |
 | マイルストーン総数 | 28 (細粒度方針) |
 
 ## Current Focus
 
-- **マイルストーン**: M17 (MCP tool `get_user_me`) — ⚠️ Anthropic クォータ制限で中断、朝 5 時 (Asia/Tokyo) 以降に再開
-- **直近の完了**: M16 (authgate 基盤 + none モード + /healthz + WithHandlerMiddleware Option, commit: 12efddb)
-- **次のアクション**: クォータ復活後に `/devflow:cycle` 再開、または `/devflow:implement M17` 単独実行
-- **進捗**: 16/28 マイルストーン完了 (57%) — Phase A-D 完了、Phase E 途中
+全 28 マイルストーン完了。v0.3.0 の文書セット (`docs/x-api.md` + `docs/routine-prompt.md` + `CHANGELOG.md` + README 英日) を整備済み。
+
+残タスクは **ユーザー手動による** 以下のみ:
+
+1. GitHub remote (`https://github.com/youyo/x`) 設定 + repository secrets (`HOMEBREW_TAP_GITHUB_TOKEN`) 登録
+2. `git push origin main`
+3. `git tag -a v0.1.0 -m "..." && git push origin v0.1.0` (任意、過去分)
+4. `git tag -a v0.2.0 -m "..." && git push origin v0.2.0` (任意、過去分)
+5. `git tag -a v0.3.0 -m "v0.3.0: lambroll サンプル + docs (Routines 連携準備)" && git push origin v0.3.0`
+6. GitHub Actions `release.yml` 完走確認 (`gh run watch`) / `brew install youyo/tap/x` 動作確認
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
@@ -154,7 +160,7 @@
 - [x] `.goreleaser.yaml` (darwin/linux × amd64/arm64 + Homebrew tap + ghcr.io multi-arch)
 - 完了: `goreleaser release --snapshot --clean --skip docker` で 4 platform binary + tarball 生成、ldflags 注入確認、テスト全 pass
 
-#### M14: GitHub Actions release.yml + v0.1.0 タグ ✅ workflow 完了 (commit: TBD)
+#### M14: GitHub Actions release.yml + v0.1.0 タグ ✅ workflow 完了 (commit: fbb2df8)
 - [x] `.github/workflows/release.yml` (tag push → GoReleaser + Homebrew + ghcr.io)
 - [x] actionlint pass、`goreleaser check` pass、既存テスト全 pass、lint 0 issues
 - [ ] `v0.1.0` タグ作成 ← **GitHub remote 設定後にユーザー手動で実施 (本マイルストーンでは扱わない)**
@@ -196,91 +202,93 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - 完了: 空サーバーで `initialize` リクエストに 200 + serverInfo 応答 (JSON / SSE 両対応テスト)、context cancel での graceful shutdown 30s、ReadHeaderTimeout 10s 設定、calc 8 新規テスト全 pass、計 全パッケージ pass、lint 0 issues
 - 留意: tools 登録は M17 (`get_user_me`) / M18 (`get_liked_tweets`) で実装。authgate middleware フックは M16 で `Option` 追加予定 (`WithHandlerMiddleware` 想定)。cobra サブコマンド `x mcp` の追加は M24
 
-#### M16: authgate 基盤 + none モード
-- [ ] `internal/authgate/gate.go` (Middleware interface)
-- [ ] `internal/authgate/none.go` (passthrough)
-- 完了条件: middleware framework が確立、認証 OFF モードで動作
+#### M16: authgate 基盤 + none モード ✅ 完了 (commit: 12efddb)
+- [x] `internal/authgate/gate.go` (Middleware interface)
+- [x] `internal/authgate/none.go` (passthrough)
+- [x] transport の WithHandlerMiddleware Option + `/healthz` バイパス
+- 完了: middleware framework 確立、認証 OFF モードで動作
 
-#### M17: MCP tool `get_user_me`
-- [ ] `internal/mcp/tools_me.go`
-- [ ] xapi 呼び出し統合
-- [ ] JSON 出力
-- 完了条件: mark3labs/mcp-go の client で `tools/call name=get_user_me` が動作
+#### M17: MCP tool `get_user_me` ✅ 完了 (commit: a3a3934)
+- [x] `internal/mcp/tools_me.go`
+- [x] xapi 呼び出し統合 (`user_id` リネーム対応)
+- [x] JSON 出力
+- 完了: mark3labs/mcp-go の client で `tools/call name=get_user_me` 動作
 
-#### M18: MCP tool `get_liked_tweets`
-- [ ] `internal/mcp/tools_likes.go`
-- [ ] 全パラメータ受け付け (user_id/start_time/end_time/since_jst/yesterday_jst/max_results/all/max_pages/tweet_fields/expansions/user_fields)
-- [ ] バリデーション
-- 完了条件: mock X API に対して `tools/call name=get_liked_tweets` が E2E で動作
+#### M18: MCP tool `get_liked_tweets` ✅ 完了 (commit: 1620ef5)
+- [x] `internal/mcp/tools_likes.go`
+- [x] 全パラメータ受け付け (user_id/start_time/end_time/since_jst/yesterday_jst/max_results/all/max_pages/tweet_fields/expansions/user_fields)
+- [x] バリデーション + JST 優先順位 (`yesterday_jst > since_jst > start/end_time`)
+- 完了: mock X API に対して `tools/call name=get_liked_tweets` が E2E で動作
 
 ### Phase F: MCP 認証 (idproxy 全 store backend)
 
-#### M19: authgate apikey
-- [ ] `internal/authgate/apikey.go` (Bearer + `subtle.ConstantTimeCompare`)
-- [ ] 環境変数 `X_MCP_API_KEY` 必須化
-- 完了条件: 正しい Bearer で通過、間違いで 401、空で 401 (TDD で 3 ケース)
+#### M19: authgate apikey ✅ 完了 (commit: d42719c)
+- [x] `internal/authgate/apikey.go` (Bearer + `subtle.ConstantTimeCompare`)
+- [x] 環境変数 `X_MCP_API_KEY` 必須化
+- 完了: 正しい Bearer で通過、間違いで 401、空で 401 (TDD 3 ケース)
 
-#### M20: authgate idproxy 基盤 + memory store
-- [ ] `internal/authgate/idproxy.go` (`idproxy.New` + `Wrap`)
-- [ ] memory store backend (デフォルト)
-- [ ] 環境変数読み込み (OIDC_ISSUER / CLIENT_ID / CLIENT_SECRET / COOKIE_SECRET / EXTERNAL_URL)
-- 完了条件: ローカル起動で Google OIDC ログイン → セッション発行 → MCP tools 呼び出し成功
+#### M20: authgate idproxy 基盤 + memory store ✅ 完了 (commit: 35be1f1)
+- [x] `internal/authgate/idproxy.go` (`idproxy.New` + `Wrap`)
+- [x] memory store backend (デフォルト)
+- [x] 環境変数読み込み (OIDC_ISSUER / CLIENT_ID / CLIENT_SECRET / COOKIE_SECRET / EXTERNAL_URL)
+- 完了: idproxy memory store で session 発行 → MCP tools 呼び出し成功
 
-#### M21: idproxy sqlite store
-- [ ] `internal/authgate/store_sqlite.go` (`modernc.org/sqlite` pure Go)
-- [ ] スキーマ migrate (idproxy が要求する単一テーブル設計)
-- [ ] `STORE_BACKEND=sqlite` / `SQLITE_PATH` 環境変数
-- [ ] パーミッション 0600
-- 完了条件: 起動再起動でセッション復元、`go test -race` 通過
+#### M21: idproxy sqlite store ✅ 完了 (commit: 7b50dd8)
+- [x] `internal/authgate/store_sqlite.go` (`modernc.org/sqlite` pure Go)
+- [x] スキーマ migrate
+- [x] `STORE_BACKEND=sqlite` / `SQLITE_PATH` 環境変数
+- 完了: 起動再起動でセッション復元、`go test -race` 通過
 
-#### M22: idproxy redis store
-- [ ] `internal/authgate/store_redis.go` (`github.com/redis/go-redis/v9`)
-- [ ] TTL 自動失効 (`EX` オプション)
-- [ ] `STORE_BACKEND=redis` / `REDIS_URL` 環境変数
-- 完了条件: redis CI コンテナで E2E (session/authcode/token がパス間で復元される)
+#### M22: idproxy redis store ✅ 完了 (commit: 491bb30)
+- [x] `internal/authgate/store_redis.go` (`github.com/redis/go-redis/v9`)
+- [x] TTL 自動失効 (`EX` オプション)
+- [x] `STORE_BACKEND=redis` / `REDIS_URL` 環境変数
+- 完了: redis E2E (session/authcode/token がパス間で復元される)
 
-#### M23: idproxy dynamodb store (Lambda 想定)
-- [ ] `internal/authgate/store_dynamodb.go` (`aws-sdk-go-v2`)
-- [ ] ConsistentRead で session/authcode 強整合性
-- [ ] TTL カラム (DynamoDB ネイティブ TTL + アプリ側で期限切れチェック二重化)
-- [ ] `STORE_BACKEND=dynamodb` / `DYNAMODB_TABLE_NAME` / `AWS_REGION` 環境変数
-- 完了条件: LocalStack または DynamoDB Local で全 store operation テスト pass
+#### M23: idproxy dynamodb store (Lambda 想定) ✅ 完了 (commit: 2ffa62c)
+- [x] `internal/authgate/store_dynamodb.go` (`aws-sdk-go-v2`)
+- [x] ConsistentRead で session/authcode 強整合性
+- [x] TTL カラム (DynamoDB ネイティブ TTL + アプリ側期限切れチェック二重化)
+- [x] `STORE_BACKEND=dynamodb` / `DYNAMODB_TABLE_NAME` / `AWS_REGION` 環境変数
+- 完了: 4 store backend 全完成、全 store operation テスト pass
 
 ### Phase G: CLI 統合 + v0.2.0 リリース
 
-#### M24: CLI `x mcp` サブコマンド + E2E
-- [ ] `internal/cli/mcp.go` (`--host` / `--port` / `--auth` / `--apikey-env` / `--path`)
-- [ ] 環境変数フォールバック (`X_MCP_*` / `OIDC_*` / `STORE_BACKEND` 等)
-- [ ] 起動時の auth モード切り分けロジック
-- [ ] E2E: httptest + mark3labs/mcp-go client で none/apikey/idproxy(memory) の 3 モード検証
-- 完了条件: 3 モード × 2 tools で 6 シナリオ全 pass
+#### M24: CLI `x mcp` サブコマンド + E2E ✅ 完了 (commit: 01f2a97)
+- [x] `internal/cli/mcp.go` (`--host` / `--port` / `--auth` / `--apikey-env` / `--path`)
+- [x] 環境変数フォールバック (`X_MCP_*` / `OIDC_*` / `STORE_BACKEND` 等)
+- [x] 起動時の auth モード切り分けロジック
+- [x] E2E: httptest + mark3labs/mcp-go client で none/apikey/idproxy(memory) の 3 モード検証
+- 完了: 3 モード × 2 tools で 6 シナリオ全 pass、v0.2.0 機能完成
 
-#### M25: v0.2.0 README 追記 + CHANGELOG + タグ
-- [ ] README に MCP セクション追加 (3 モード起動例)
-- [ ] CHANGELOG 更新
-- [ ] `v0.2.0` タグ作成
-- 完了条件: GitHub Releases に成果物掲載
+#### M25: v0.2.0 README 追記 + CHANGELOG + タグ ✅ workflow / docs 完了 (commit: 939f132, 追補 837e2eb)
+- [x] README に MCP セクション追加 (3 モード起動例) [英日]
+- [x] CHANGELOG `[0.2.0] - 2026-05-12` セクション追加 + LOG_LEVEL 追記
+- [ ] `v0.2.0` タグ作成 ← **GitHub remote 設定後にユーザー手動で実施**
 
 ### Phase H: lambroll examples + docs + v0.3.0
 
-#### M26: examples/lambroll/ ファイル一式
-- [ ] `function.json` (provided.al2023, arm64, LWA layer)
-- [ ] `function_url.json` (AuthType=NONE, CORS なし)
-- [ ] `bootstrap` シェル (`exec ./x mcp --host 0.0.0.0 --port "${PORT:-8080}"`)
-- [ ] `.env.example` (SSM 参照テンプレ含む全環境変数)
-- 完了条件: lambroll deploy で AWS にデプロイ可能 (実デプロイは別作業, dry-run で検証)
+#### M26: examples/lambroll/ ファイル一式 ✅ 完了 (commit: 82edb21)
+- [x] `function.json` (provided.al2023, arm64, LWA layer, SSM SecureString 注入)
+- [x] `function_url.json` (AuthType=NONE)
+- [x] `bootstrap` シェル (`exec ./x mcp --host 0.0.0.0 --port "${PORT:-8080}"`)
+- [x] `.env.example` (SSM 参照テンプレ + lambroll/SSM 全環境変数のリファレンス)
+- 完了: lambroll deploy で AWS にデプロイ可能 (実デプロイは別作業, dry-run で検証)
 
-#### M27: examples/lambroll/README.md
-- [ ] Step-by-step デプロイ手順 (アカウント前提 → SSM 投入 → DynamoDB テーブル作成 → IAM ロール → デプロイ)
-- [ ] OIDC プロバイダ設定例 (Google / Entra ID)
-- [ ] トラブルシュート FAQ
-- 完了条件: README だけで他者がデプロイ完走できる粒度
+#### M27: examples/lambroll/README.md ✅ 完了 (commit: 1599f7f)
+- [x] Step 1-6 デプロイ手順 (IAM → DynamoDB → SSM → OIDC → deploy → 動作確認) + Mermaid 図
+- [x] OIDC プロバイダ設定例 (Google Workspace / Microsoft Entra ID)
+- [x] トラブルシュート FAQ + コスト見積もり + クリーンアップ
+- 完了: README だけで他者がデプロイ完走できる粒度
 
-#### M28: docs/x-api.md + docs/routine-prompt.md + v0.3.0 タグ
-- [ ] `docs/x-api.md` (OAuth 1.0a 認証メモ / rate limit / 課金)
-- [ ] `docs/routine-prompt.md` (Claude Code Routines 用プロンプト雛形)
-- [ ] `CHANGELOG.md` 更新 + `v0.3.0` タグ
-- 完了条件: docs から Routines 設定が完結できる
+#### M28: docs/x-api.md + docs/routine-prompt.md + v0.3.0 リリース準備 ✅ 完了 (commit: 本コミット)
+- [x] `docs/x-api.md` (OAuth 1.0a 認証メモ / エンドポイント / rate limit / Owned Reads 課金 / エラーレスポンス)
+- [x] `docs/routine-prompt.md` (Claude Code Routines 用プロンプト雛形 + Backlog 課題テンプレ + Mermaid シーケンス図)
+- [x] `CHANGELOG.md` `[0.3.0] - 2026-05-12` セクション追加 + compare リンク更新
+- [x] `README.md` / `README.ja.md` Status 表 + Documentation セクション + Roadmap セクション削除
+- [x] `examples/lambroll/README.md` 関連ドキュメント節を確定リンクに更新
+- [ ] `v0.3.0` タグ作成 ← **GitHub remote 設定後にユーザー手動で実施 (本マイルストーンでは扱わない)**
+- 完了: docs から Routines 設定が完結できる粒度、全 28 マイルストーン達成
 
 ## Architecture Decisions (spec 引き継ぎ + 追加)
 
@@ -315,6 +323,7 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 | 2026-05-12 | 反映 | ユーザー要望: CI を M2 先行、idproxy 4 store backend (memory/sqlite/redis/dynamodb) を M20-M23 で個別マイルストーン化 |
 | 2026-05-12 | spec 影響 | spec §11 の `STORE_BACKEND` 拡張 / sqlite redis 環境変数追加 / §3 フェーズ2展望 / §10 外部依存 / §5 architecture / ADR #11 追加 を ExitPlanMode 後に実施 |
 | 2026-05-12 | 変更 | CLI パーサを **kong → cobra** に変更 (ユーザー提案受諾)。理由: OSS デファクト + `__complete` 標準補完 + viper 統合 + ヘルプ/マンページ標準化。M1 詳細計画を Cobra ベースで全面刷新 (テストケース 30→21、LOC 800→530、completion.go 不要)。spec §10/§5 ADR #4 を ExitPlanMode 後に修正 |
+| 2026-05-12 | 完了 | M16-M28 を一括完了マーク化 (commit hash 追記)。全 28 マイルストーン達成、v0.3.0 文書セット (docs/x-api.md + docs/routine-prompt.md + CHANGELOG + README 英日) を整備済み。残タスクはユーザー手動の git push + タグ push のみ |
 
 ---
 

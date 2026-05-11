@@ -9,17 +9,17 @@ Read this in: [English](README.md) | 日本語
 
 X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude Code Routines を使った「前日に Like した Post → Backlog 課題化」自動化基盤の土台として設計されている。
 
-設計方針は **「CLI がコア、MCP はその薄いラッパー」**。`v0.2.0` から Remote MCP サーバーが利用可能になった。AWS Lambda デプロイサンプルは `v0.3.0` で対応予定。
+設計方針は **「CLI がコア、MCP はその薄いラッパー」**。`v0.3.0` から AWS Lambda Function URL 用デプロイサンプル (`examples/lambroll/`) と Claude Code Routines 用プロンプト雛形 (`docs/routine-prompt.md`) も提供する。
 
 ## ステータス
 
-`v0.2.0` で **Remote MCP サーバー** をリリース。リリース履歴:
+`v0.3.0` で 3 フェーズ計画 (CLI → MCP → 公開配布) が完了。リリース履歴:
 
 | バージョン | スコープ |
 |---------|-------|
 | `v0.1.0` | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
-| `v0.2.0` (本リリース) | Remote MCP サーバー (`x mcp --auth idproxy\|apikey\|none`) と `get_user_me` / `get_liked_tweets` tools、加えて 4 種類の `idproxy` ストアバックエンド (memory / sqlite / redis / dynamodb) |
-| `v0.3.0` (予定) | `examples/lambroll/` AWS Lambda デプロイサンプル + Claude Code Routines プロンプト雛形 |
+| `v0.2.0` | Remote MCP サーバー (`x mcp --auth idproxy\|apikey\|none`) と `get_user_me` / `get_liked_tweets` tools、加えて 4 種類の `idproxy` ストアバックエンド (memory / sqlite / redis / dynamodb) |
+| `v0.3.0` (本リリース) | `examples/lambroll/` AWS Lambda Function URL デプロイサンプル + Claude Code Routines プロンプト雛形 (`docs/routine-prompt.md`) + X API v2 リファレンス (`docs/x-api.md`) |
 
 詳細仕様は [`docs/specs/x-spec.md`](docs/specs/x-spec.md) を参照。
 
@@ -300,11 +300,16 @@ access_token_secret = "..."
 | `4` | 権限エラー (X API `403`) |
 | `5` | 見つからない (X API `404`) |
 
-## ロードマップ
+## ドキュメント
 
-- **`v0.3.0`** — `examples/lambroll/`: AWS Lambda + Function URL + Lambda Web Adapter デプロイサンプル + Claude Code Routines プロンプト雛形 (`docs/routine-prompt.md`)
-
-マイルストーン分解は [`plans/x-roadmap.md`](plans/x-roadmap.md) を、リリース履歴は [`CHANGELOG.md`](CHANGELOG.md) を参照。
+| ドキュメント | 用途 |
+|---|---|
+| [`docs/specs/x-spec.md`](docs/specs/x-spec.md) | プロダクト仕様書 (Approved v1.0.0) |
+| [`docs/x-api.md`](docs/x-api.md) | X API v2 OAuth 1.0a + レート制限 + Owned Reads 課金リファレンス |
+| [`docs/routine-prompt.md`](docs/routine-prompt.md) | Claude Code Routines 用プロンプト雛形 (前日 Like → Backlog 課題化) |
+| [`examples/lambroll/README.md`](examples/lambroll/README.md) | AWS Lambda Function URL デプロイ手順 (lambroll + LWA) |
+| [`CHANGELOG.md`](CHANGELOG.md) | リリース履歴 |
+| [`plans/x-roadmap.md`](plans/x-roadmap.md) | マイルストーン分解 (全 28 マイルストーン完了) |
 
 ## 開発
 
@@ -347,7 +352,7 @@ git push origin vX.Y.Z
 - `youyo/homebrew-tap` formula の更新
 - `ghcr.io/youyo/x:X.Y.Z` / `:latest` への Docker イメージ push
 
-`v0.2.0` については本リポジトリからまだタグを push していない。上記手順はその意図を文書化したもの。
+`v0.1.0` / `v0.2.0` / `v0.3.0` のいずれのタグも本リポジトリからはまだ push していない。上記手順はその意図を文書化したもの。
 
 ## コントリビュート
 

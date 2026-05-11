@@ -9,17 +9,17 @@ Read this in: English | [日本語](README.ja.md)
 
 A single-binary Go CLI for working with the X (formerly Twitter) API v2 — designed as a building block for automating "yesterday's Liked posts → Backlog tickets" workflows via Claude Code Routines.
 
-The design principle is **"CLI is the core, MCP is a thin wrapper"**. The Remote MCP server is now available in `v0.2.0`; the AWS Lambda deployment sample is scheduled for `v0.3.0`.
+The design principle is **"CLI is the core, MCP is a thin wrapper"**. From `v0.3.0`, the AWS Lambda Function URL deployment sample (`examples/lambroll/`) and the Claude Code Routines prompt template (`docs/routine-prompt.md`) are also provided.
 
 ## Status
 
-`v0.2.0` ships the **Remote MCP server**. Release history:
+`v0.3.0` completes the 3-phase plan (CLI → MCP → public distribution). Release history:
 
 | Version | Scope |
 |---------|-------|
 | `v0.1.0` | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
-| `v0.2.0` (this release) | Remote MCP server (`x mcp --auth idproxy\|apikey\|none`) with `get_user_me` and `get_liked_tweets` tools, plus four `idproxy` store backends (memory / sqlite / redis / dynamodb) |
-| `v0.3.0` (planned) | `examples/lambroll/` deployment sample + Claude Code Routines prompt template |
+| `v0.2.0` | Remote MCP server (`x mcp --auth idproxy\|apikey\|none`) with `get_user_me` and `get_liked_tweets` tools, plus four `idproxy` store backends (memory / sqlite / redis / dynamodb) |
+| `v0.3.0` (this release) | `examples/lambroll/` AWS Lambda Function URL deployment sample + Claude Code Routines prompt template (`docs/routine-prompt.md`) + X API v2 reference (`docs/x-api.md`) |
 
 See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specification.
 
@@ -300,11 +300,16 @@ When set, environment variables take precedence over file-based credentials.
 | `4` | Permission error (X API `403`) |
 | `5` | Not found (X API `404`) |
 
-## Roadmap
+## Documentation
 
-- **`v0.3.0`** — `examples/lambroll/`: AWS Lambda + Function URL + Lambda Web Adapter deployment sample, plus Claude Code Routines prompt template (`docs/routine-prompt.md`)
-
-See [`plans/x-roadmap.md`](plans/x-roadmap.md) for the full milestone breakdown and [`CHANGELOG.md`](CHANGELOG.md) for released versions.
+| Document | Purpose |
+|---|---|
+| [`docs/specs/x-spec.md`](docs/specs/x-spec.md) | Full product specification (Approved v1.0.0) |
+| [`docs/x-api.md`](docs/x-api.md) | X API v2 OAuth 1.0a + rate limit + Owned Reads pricing reference |
+| [`docs/routine-prompt.md`](docs/routine-prompt.md) | Claude Code Routines prompt template (yesterday's Likes → Backlog issues) |
+| [`examples/lambroll/README.md`](examples/lambroll/README.md) | AWS Lambda Function URL deployment guide (lambroll + LWA) |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history |
+| [`plans/x-roadmap.md`](plans/x-roadmap.md) | Milestone breakdown (all 28 milestones complete) |
 
 ## Development
 
@@ -347,7 +352,7 @@ The release workflow then:
 - updates the `youyo/homebrew-tap` formula
 - pushes Docker images to `ghcr.io/youyo/x:X.Y.Z` and `:latest`
 
-For `v0.2.0`, the tag has not been pushed yet from this repository; the procedure above documents the intent.
+No tags (`v0.1.0` / `v0.2.0` / `v0.3.0`) have been pushed yet from this repository; the procedure above documents the intent.
 
 ## Contributing
 
