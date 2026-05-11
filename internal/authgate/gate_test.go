@@ -73,19 +73,21 @@ func TestNew_APIKey_WithAPIKey_Success(t *testing.T) {
 	}
 }
 
-// TestNew_IDProxy_ReturnsErrUnsupportedMode は M16 で idproxy が未実装であることを契約として pin する。
-func TestNew_IDProxy_ReturnsErrUnsupportedMode(t *testing.T) {
+// TestNew_IDProxy_MissingOpts_ReturnsErrConfigInvalid は ModeIDProxy で Option を一切
+// 指定しなかった場合に ErrIDProxyConfigInvalid を返すことを確認する。env 直読をしない
+// 契約を pin する。
+func TestNew_IDProxy_MissingOpts_ReturnsErrConfigInvalid(t *testing.T) {
 	t.Parallel()
 
 	mw, err := authgate.New(authgate.ModeIDProxy)
 	if err == nil {
-		t.Fatal("New(ModeIDProxy) returned nil error, want ErrUnsupportedMode")
+		t.Fatal("New(ModeIDProxy) returned nil error, want ErrIDProxyConfigInvalid")
 	}
-	if !errors.Is(err, authgate.ErrUnsupportedMode) {
-		t.Errorf("New(ModeIDProxy) error = %v, want errors.Is ErrUnsupportedMode", err)
+	if !errors.Is(err, authgate.ErrIDProxyConfigInvalid) {
+		t.Errorf("error = %v, want errors.Is ErrIDProxyConfigInvalid", err)
 	}
 	if mw != nil {
-		t.Errorf("New(ModeIDProxy) returned non-nil Middleware: %T", mw)
+		t.Errorf("returned non-nil Middleware: %T", mw)
 	}
 }
 

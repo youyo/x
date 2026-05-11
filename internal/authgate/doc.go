@@ -7,19 +7,22 @@
 //   - apikey:  Bearer token を共有シークレットと定数時間比較する。CI / Routine
 //     からの呼び出しを想定する。
 //   - idproxy: OIDC ベースの session 認証。本番想定。memory / sqlite / redis /
-//     dynamodb の 4 store backend をサポートする。
+//     dynamodb の 4 store backend をサポートする計画。
 //
 // 本パッケージは [Middleware] interface と [New] ファクトリを公開し、モード値は
 // [Mode] 型の定数 ([ModeNone] / [ModeAPIKey] / [ModeIDProxy]) として表現する。
 //
-// M19 までで [ModeNone] / [ModeAPIKey] を実装済み。[ModeIDProxy] は後続マイル
-// ストーン (M20) で追加する。サポート外のモードに対しては [ErrUnsupportedMode]
+// M20 までで 3 モード全実装済み。ただし [ModeIDProxy] については memory store のみを
+// M20 で実装し、sqlite / redis / dynamodb は M21–M23 で順次追加する。また、
+// 現状の idproxy 統合は `idproxy.Config.OAuth = nil` 固定で **ブラウザ cookie session
+// 認証のみ** を提供し、OAuth 2.1 AS / Bearer JWT 検証は未対応である (機械実行は
+// [ModeAPIKey] を利用すること)。サポート外のモードに対しては [ErrUnsupportedMode]
 // でラップされたエラーを返す。空文字 "" もこのエラーで弾く方針とし、defaulting
 // は呼び出し側 CLI 層 (M24) の責務とする。
 //
-// 各モード固有の設定 (apikey の共有シークレット等) は [Option] 経由で注入し、
-// 本パッケージは環境変数を一切直接読まない。env 読み込みは CLI 層 M24 の責務
-// とする。
+// 各モード固有の設定 (apikey の共有シークレット、idproxy の OIDC 設定等) は [Option]
+// 経由で注入し、本パッケージは環境変数を一切直接読まない。env 読み込みは CLI 層 M24
+// の責務とする。
 //
 // transport/http パッケージとは循環依存を避けるため、Middleware の差し込みは
 // `func(http.Handler) http.Handler` 型を介する。呼び出し側は次のように接続する:
@@ -32,5 +35,16 @@
 //	apiKey := os.Getenv("X_MCP_API_KEY") // 読み込みは CLI 層の責務
 //	mw, err := authgate.New(authgate.ModeAPIKey, authgate.WithAPIKey(apiKey))
 //	if err != nil { /* ErrAPIKeyMissing 等を処理 */ }
+//	srv := http.NewServer(mcp, http.WithHandlerMiddleware(mw.Wrap))
+//
+//	// idproxy モード (memory store デフォルト, ブラウザ cookie session)
+//	mw, err := authgate.New(authgate.ModeIDProxy,
+//	    authgate.WithOIDCIssuer(os.Getenv("OIDC_ISSUER")),
+//	    authgate.WithOIDCClientID(os.Getenv("OIDC_CLIENT_ID")),
+//	    authgate.WithOIDCClientSecret(os.Getenv("OIDC_CLIENT_SECRET")),
+//	    authgate.WithCookieSecret(os.Getenv("COOKIE_SECRET")), // hex 32B+
+//	    authgate.WithExternalURL(os.Getenv("EXTERNAL_URL")),
+//	)
+//	if err != nil { /* ErrIDProxyConfigInvalid 等を処理 */ }
 //	srv := http.NewServer(mcp, http.WithHandlerMiddleware(mw.Wrap))
 package authgate
