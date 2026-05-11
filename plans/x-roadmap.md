@@ -25,9 +25,9 @@
 
 ## Current Focus
 
-- **マイルストーン**: M11 (CLI `x liked list` 拡張)
-- **直近の完了**: M10 (CLI `x liked list` 基本フラグ + `ErrInvalidArgument` 番兵 + exit 2 写像)
-- **次のアクション**: M11 の詳細計画作成と実装
+- **マイルストーン**: M13 (README/CHANGELOG/LICENSE/GoReleaser)
+- **直近の完了**: M12 (CLI `x configure` 対話モード + `--print-paths` / `--check` + config.toml [liked] 連携)
+- **次のアクション**: M13 の詳細計画作成と実装 (v0.1.0 リリース準備)
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
