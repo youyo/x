@@ -403,7 +403,8 @@ func TestLikedList_InvalidArgument(t *testing.T) {
 // ErrCredentialsMissing が返ることを検証する (caller で exit 3 写像)。
 func TestLikedList_CredentialsMissing(t *testing.T) {
 	clearXAPIEnv(t)
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// M12: loadLikedDefaults が開発機の ~/.config/x/config.toml を拾わないよう隔離。
+	isolateXDG(t)
 
 	cmd := NewRootCmd()
 	buf := &bytes.Buffer{}

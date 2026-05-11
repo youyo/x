@@ -11,6 +11,19 @@ import (
 	"github.com/youyo/x/internal/xapi"
 )
 
+// isolateXDG は XDG_CONFIG_HOME / XDG_DATA_HOME をテスト用一時ディレクトリに固定し、
+// 開発機 / CI ホストの実 config.toml / credentials.toml がテストへ漏れ込むのを防ぐ。
+//
+// M12 で `internal/cli/liked.go` がデフォルト値を `config.toml` から読むようになるため、
+// 既存テストが偶発的に `~/.config/x/config.toml` を拾うと query 期待値がずれて
+// silently fail する可能性がある (plans/x-m12-cli-configure.md リスク #2)。
+// すべての CLI テストの先頭で呼び出すことで、テスト間の独立性とローカル/CI 整合性を保つ。
+func isolateXDG(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+}
+
 // clearXAPIEnv は X API 関連の環境変数を t.Setenv で空文字に固定する。
 // 親プロセス側に既に値が設定されている場合の汚染を防ぐ。
 func clearXAPIEnv(t *testing.T) {
@@ -26,8 +39,12 @@ func clearXAPIEnv(t *testing.T) {
 }
 
 // setAllXAPIEnv は X API 関連の環境変数を 4 つすべて非空にセットする。
+//
+// M12 以降は isolateXDG も同時に呼び出し、`liked.go` が `config.toml` を読みに行く
+// パスが開発機 / CI の実ファイルに到達しないようにする。
 func setAllXAPIEnv(t *testing.T) {
 	t.Helper()
+	isolateXDG(t)
 	t.Setenv("X_API_KEY", "env-key")
 	t.Setenv("X_API_SECRET", "env-secret")
 	t.Setenv("X_ACCESS_TOKEN", "env-token")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -22,19 +23,36 @@ import (
 // 仕様 (spec §6) に明示は無いため、CLI の独自判断として plans/x-m10-cli-liked-basic.md D-5 で確定。
 const likedHumanTextMaxRunes = 80
 
-// likedDefaultTweetFields / likedDefaultExpansions / likedDefaultUserFields は
-// spec §11 `[liked]` セクションのデフォルト値を CLI 層にハードコードした値である。
+// loadLikedDefaults は `x liked list` の各フラグデフォルト値を解決して返す (M12)。
 //
-// M11 では config.toml 連携を実装せず、これらの定数を pflag のデフォルト値として使う
-// (M12 で config.toml ロードを追加する際にも、このハードコードがフォールバックとして残る予定)。
-const (
-	likedDefaultTweetFields = "id,text,author_id,created_at,entities,public_metrics"
-	likedDefaultExpansions  = "author_id"
-	likedDefaultUserFields  = "username,name"
-)
-
-// likedDefaultMaxPages は --max-pages のデフォルト値である (spec §6 / §10 / §11)。
-const likedDefaultMaxPages = 50
+// 解決順 (spec §11 優先順位、env > config.toml > 組み込みデフォルト の文脈で
+// 本マイルストーンは config.toml > 組み込みデフォルト 部分のみを担う):
+//  1. `config.DefaultCLIConfigPath()` でパス解決
+//  2. `config.LoadCLI(path)` で `[liked]` セクションを取得
+//     - パス解決 / 読み込み失敗時は `log.Printf` で warning し、`config.DefaultCLIConfig()`
+//     (spec §11 のテンプレ値) にフォールバック (D-8: best-effort 方針)
+//     - LoadCLI 自身がファイル不在を ErrNotExist で握り潰し DefaultCLIConfig 相当を返すため、
+//     通常運用 (まだ configure していないユーザ) では warning は出ない
+//  3. LoadCLI 内部の applyDefaults により空フィールドは spec デフォルト値で補完済
+//
+// 環境変数 (`X_LIKED_*` 等) は spec §11 環境変数一覧に存在しないため対象外。
+//
+// 返却値は順に: tweet.fields / expansions / user.fields / max-pages。文字列は CSV、
+// 数値は --max-pages のデフォルト値 (--all 指定時のページ上限) として使う。
+func loadLikedDefaults() (tweetFields, expansions, userFields string, maxPages int) {
+	fallback := config.DefaultCLIConfig().Liked
+	path, err := config.DefaultCLIConfigPath()
+	if err != nil {
+		log.Printf("warning: cannot resolve config.toml path (using built-in defaults): %v", err)
+		return fallback.DefaultTweetFields, fallback.DefaultExpansions, fallback.DefaultUserFields, fallback.DefaultMaxPages
+	}
+	cfg, err := config.LoadCLI(path)
+	if err != nil {
+		log.Printf("warning: cannot load config.toml at %s (using built-in defaults): %v", path, err)
+		return fallback.DefaultTweetFields, fallback.DefaultExpansions, fallback.DefaultUserFields, fallback.DefaultMaxPages
+	}
+	return cfg.Liked.DefaultTweetFields, cfg.Liked.DefaultExpansions, cfg.Liked.DefaultUserFields, cfg.Liked.DefaultMaxPages
+}
 
 // likedOutputMode は --no-json / --ndjson フラグから決定される出力モードである。
 //
@@ -122,6 +140,9 @@ func newLikedCmd() *cobra.Command {
 //
 //nolint:gocyclo // CLI コマンドのフラグ処理は分岐が多いが手続き的に追える流れに揃えている
 func newLikedListCmd() *cobra.Command {
+	// M12: config.toml [liked] からデフォルト値を解決する (失敗時は spec デフォルトにフォールバック)。
+	dfTweetFields, dfExpansions, dfUserFields, dfMaxPages := loadLikedDefaults()
+
 	var (
 		userID          string
 		startTime       string
@@ -263,12 +284,12 @@ func newLikedListCmd() *cobra.Command {
 	cmd.Flags().IntVar(&maxResults, "max-results", 100, "max tweets per page (1..100)")
 	cmd.Flags().StringVar(&paginationToken, "pagination-token", "", "resume from a previous page using next_token")
 	cmd.Flags().BoolVar(&all, "all", false, "auto-follow next_token until end or --max-pages")
-	cmd.Flags().IntVar(&maxPages, "max-pages", likedDefaultMaxPages, "max pages to fetch when --all is set")
+	cmd.Flags().IntVar(&maxPages, "max-pages", dfMaxPages, "max pages to fetch when --all is set")
 	cmd.Flags().BoolVar(&noJSON, "no-json", false, "output human-readable text instead of JSON")
 	cmd.Flags().BoolVar(&ndjson, "ndjson", false, "output line-delimited JSON (one tweet per line)")
-	cmd.Flags().StringVar(&tweetFields, "tweet-fields", likedDefaultTweetFields, "comma-separated tweet.fields")
-	cmd.Flags().StringVar(&expansions, "expansions", likedDefaultExpansions, "comma-separated expansions")
-	cmd.Flags().StringVar(&userFields, "user-fields", likedDefaultUserFields, "comma-separated user.fields")
+	cmd.Flags().StringVar(&tweetFields, "tweet-fields", dfTweetFields, "comma-separated tweet.fields")
+	cmd.Flags().StringVar(&expansions, "expansions", dfExpansions, "comma-separated expansions")
+	cmd.Flags().StringVar(&userFields, "user-fields", dfUserFields, "comma-separated user.fields")
 	return cmd
 }
 
