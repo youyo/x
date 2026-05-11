@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -21,18 +22,47 @@ import (
 // 仕様 (spec §6) に明示は無いため、CLI の独自判断として plans/x-m10-cli-liked-basic.md D-5 で確定。
 const likedHumanTextMaxRunes = 80
 
+// likedDefaultTweetFields / likedDefaultExpansions / likedDefaultUserFields は
+// spec §11 `[liked]` セクションのデフォルト値を CLI 層にハードコードした値である。
+//
+// M11 では config.toml 連携を実装せず、これらの定数を pflag のデフォルト値として使う
+// (M12 で config.toml ロードを追加する際にも、このハードコードがフォールバックとして残る予定)。
+const (
+	likedDefaultTweetFields = "id,text,author_id,created_at,entities,public_metrics"
+	likedDefaultExpansions  = "author_id"
+	likedDefaultUserFields  = "username,name"
+)
+
+// likedDefaultMaxPages は --max-pages のデフォルト値である (spec §6 / §10 / §11)。
+const likedDefaultMaxPages = 50
+
+// likedOutputMode は --no-json / --ndjson フラグから決定される出力モードである。
+//
+// 排他関係 (D-1): --no-json と --ndjson は同時指定できない。
+// 既定 (両 false) は likedOutputModeJSON で *xapi.LikedTweetsResponse 全体を 1 JSON で出力する。
+type likedOutputMode int
+
+const (
+	likedOutputModeJSON   likedOutputMode = iota // 既定 (両 false): {data, includes, meta} を単一 JSON
+	likedOutputModeHuman                         // --no-json: 1 行/ツイートの human フォーマット
+	likedOutputModeNDJSON                        // --ndjson: 1 ツイート 1 行 JSON
+)
+
 // likedClient は newLikedListCmd が必要とする X API クライアントの最小インターフェイスである。
 //
-// 本番では *xapi.Client が GetUserMe / ListLikedTweets の両メソッドを実装するためそのまま満たす。
+// 本番では *xapi.Client が GetUserMe / ListLikedTweets / EachLikedPage を実装するためそのまま満たす。
 // テストでは httptest.Server に紐付いた実装を newLikedClient 経由で差し替えることで
 // ネットワークアクセスなしに 各種シナリオを検証できる (M9 meClient と同じ流儀)。
 //
 // GetUserMe を含めている理由: --user-id 未指定時に self の数値 ID を解決する必要があるため
 // (spec §6 "default: me" は self 解決を意味する。"me" 文字列を :id にそのまま渡しても X API は
 // 受け付けない、plans/x-m10-cli-liked-basic.md D-2)。
+//
+// EachLikedPage は --all 時の next_token 自動辿り (M11) で利用する。
 type likedClient interface {
 	GetUserMe(ctx context.Context, opts ...xapi.UserFieldsOption) (*xapi.User, error)
 	ListLikedTweets(ctx context.Context, userID string, opts ...xapi.LikedTweetsOption) (*xapi.LikedTweetsResponse, error)
+	EachLikedPage(ctx context.Context, userID string, fn func(*xapi.LikedTweetsResponse) error, opts ...xapi.LikedTweetsOption) error
 }
 
 // newLikedClient は newLikedListCmd 内部で利用する likedClient の生成関数である。
@@ -41,7 +71,7 @@ type likedClient interface {
 // 本番では xapi.NewClient(ctx, creds) をそのまま返却する。
 //
 // 関数シグネチャに error を含めているのは将来 client 構築時にバリデーションが入る可能性を
-// 想定した拡張余地である。M10 時点では常に nil error。
+// 想定した拡張余地である。M10/M11 時点では常に nil error。
 var newLikedClient = func(ctx context.Context, creds *config.Credentials) (likedClient, error) {
 	return xapi.NewClient(ctx, creds), nil
 }
@@ -49,7 +79,7 @@ var newLikedClient = func(ctx context.Context, creds *config.Credentials) (liked
 // newLikedCmd は `x liked` 親コマンドを生成する factory である。
 //
 // 親コマンド自体は実処理を行わず help を表示するのみ。実体は `list` サブコマンド
-// (newLikedListCmd) に委譲する。将来 M11 以降で `x liked count` などのサブコマンドを
+// (newLikedListCmd) に委譲する。将来 M12 以降で `x liked count` などのサブコマンドを
 // 増やす余地を残すために親コマンドを分離している。
 func newLikedCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -64,15 +94,22 @@ func newLikedCmd() *cobra.Command {
 // newLikedListCmd は `x liked list` サブコマンドを生成する factory である。
 //
 // 動作 (順序固定):
-//  1. フラグ値を解釈し --max-results / --start-time / --end-time を検証する
+//  1. フラグ値を解釈・検証する (--max-results / 時刻文字列 / 排他フラグ等)
 //     - 不正値は cli.ErrInvalidArgument で wrap して返却 (exit 2)
-//  2. LoadCredentialsFromEnvOrFile で env > credentials.toml の優先順位で認証情報を解決
-//  3. newLikedClient で xapi クライアントを生成
-//  4. --user-id 未指定なら GetUserMe で self の ID を取得して置換 (plans D-2)
-//  5. xapi.LikedTweetsOption を組み立て ListLikedTweets を呼び出す
-//  6. 出力:
-//     - --no-json=false (default): *xapi.LikedTweetsResponse 全体を JSON エンコード (plans D-4)
-//     - --no-json=true: resp.Data を 1 ツイート 1 行で human フォーマット (plans D-5)
+//  2. 時間窓を決定する: --yesterday-jst > --since-jst > --start-time/--end-time (D-2)
+//  3. LoadCredentialsFromEnvOrFile で env > credentials.toml の優先順位で認証情報を解決
+//  4. newLikedClient で xapi クライアントを生成
+//  5. --user-id 未指定なら GetUserMe で self の ID を取得して置換
+//  6. xapi.LikedTweetsOption を組み立て:
+//     - --all=true 時のみ WithMaxPages を追加
+//     - tweet/expansions/user fields は CLI 既定値または明示指定の csv を反映
+//  7. 取得:
+//     - --all=false (default): ListLikedTweets (単一ページ)
+//     - --all=true: EachLikedPage で next_token 自動辿り
+//  8. 出力 (likedOutputMode で分岐):
+//     - JSON (既定): 集約レスポンスを単一 JSON、--all 時は meta を再構築 (D-8)
+//     - Human (--no-json): 1 行/ツイート、改行/タブ正規化 + 80 ルーン truncate
+//     - NDJSON (--ndjson): 1 ツイート 1 行 JSON、HTML エスケープ無効 (D-12)
 //
 // バリデーションを認証情報ロードより先に行う理由は plans D-7 を参照
 // (引数エラーが先にユーザに見える、ファイル I/O を避ける)。
@@ -82,14 +119,24 @@ func newLikedCmd() *cobra.Command {
 //   - xapi.ErrAuthentication → exit 3 (ErrCredentialsMissing 含む)
 //   - xapi.ErrPermission     → exit 4
 //   - xapi.ErrNotFound       → exit 5
+//
+//nolint:gocyclo // CLI コマンドのフラグ処理は分岐が多いが手続き的に追える流れに揃えている
 func newLikedListCmd() *cobra.Command {
 	var (
 		userID          string
 		startTime       string
 		endTime         string
+		sinceJST        string
+		yesterdayJST    bool
 		maxResults      int
 		paginationToken string
+		all             bool
+		maxPages        int
 		noJSON          bool
+		ndjson          bool
+		tweetFields     string
+		expansions      string
+		userFields      string
 	)
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -97,12 +144,19 @@ func newLikedListCmd() *cobra.Command {
 		Long: "List liked tweets for the authenticated user (or a specified user).\n" +
 			"Credentials are loaded in the order: env (X_API_KEY/X_API_SECRET/X_ACCESS_TOKEN/X_ACCESS_TOKEN_SECRET) > credentials.toml.\n" +
 			"By default outputs the full response ({data, includes, meta}) as JSON.\n" +
-			"With --no-json prints one tweet per line as id=...\\tauthor=...\\tcreated=...\\ttext=...\n" +
+			"--no-json prints one tweet per line as id=...\\tauthor=...\\tcreated=...\\ttext=...\n" +
+			"--ndjson prints one JSON object per tweet (line-delimited, HTML escape disabled).\n" +
+			"--since-jst YYYY-MM-DD or --yesterday-jst override --start-time/--end-time.\n" +
+			"--all auto-follows next_token up to --max-pages (default 50).\n" +
 			"Exit codes: 0 success, 1 generic, 2 argument error, 3 auth, 4 permission, 5 not found.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// 1. 引数バリデーション (plans D-7: 認証ロードより先)。
 			if maxResults < 1 || maxResults > 100 {
 				return fmt.Errorf("%w: --max-results must be in 1..100, got %d", ErrInvalidArgument, maxResults)
+			}
+			outMode, err := decideOutputMode(noJSON, ndjson)
+			if err != nil {
+				return err
 			}
 			var startT, endT time.Time
 			if startTime != "" {
@@ -119,21 +173,36 @@ func newLikedListCmd() *cobra.Command {
 				}
 				endT = t
 			}
+			// 2. 時間窓決定 (--yesterday-jst > --since-jst > --start-time/--end-time, D-2)。
+			switch {
+			case yesterdayJST:
+				s, e, err := yesterdayJSTRange(time.Now())
+				if err != nil {
+					return err
+				}
+				startT, endT = s, e
+			case sinceJST != "":
+				s, e, err := parseJSTDate(sinceJST)
+				if err != nil {
+					return err
+				}
+				startT, endT = s, e
+			}
 
-			// 2. 認証情報ロード (env > file)。
+			// 3. 認証情報ロード (env > file)。
 			creds, err := LoadCredentialsFromEnvOrFile()
 			if err != nil {
 				return err
 			}
 
-			// 3. クライアント生成。
+			// 4. クライアント生成。
 			ctx := cmd.Context()
 			client, err := newLikedClient(ctx, creds)
 			if err != nil {
 				return err
 			}
 
-			// 4. --user-id 未指定なら self を解決 (plans D-2)。
+			// 5. --user-id 未指定なら self を解決 (plans D-2)。
 			targetUserID := userID
 			if targetUserID == "" {
 				user, err := client.GetUserMe(ctx)
@@ -143,8 +212,7 @@ func newLikedListCmd() *cobra.Command {
 				targetUserID = user.ID
 			}
 
-			// 5. オプション組み立て。
-			//    WithMaxResults は常に呼ぶ (0 を流さない、plans D-3)。
+			// 6. オプション組み立て。
 			opts := []xapi.LikedTweetsOption{
 				xapi.WithMaxResults(maxResults),
 			}
@@ -155,28 +223,250 @@ func newLikedListCmd() *cobra.Command {
 				opts = append(opts, xapi.WithEndTime(endT))
 			}
 			if paginationToken != "" {
-				opts = append(opts, xapi.WithPaginationToken(paginationToken))
+				if all {
+					// D-5: --all 時の --pagination-token は警告して無視 (stderr に 1 行)。
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
+						"warning: --pagination-token is ignored when --all is set")
+				} else {
+					opts = append(opts, xapi.WithPaginationToken(paginationToken))
+				}
+			}
+			if fs := splitCSV(tweetFields); len(fs) > 0 {
+				opts = append(opts, xapi.WithTweetFields(fs...))
+			}
+			if fs := splitCSV(expansions); len(fs) > 0 {
+				opts = append(opts, xapi.WithExpansions(fs...))
+			}
+			if fs := splitCSV(userFields); len(fs) > 0 {
+				opts = append(opts, xapi.WithLikedUserFields(fs...))
+			}
+			if all {
+				opts = append(opts, xapi.WithMaxPages(maxPages))
 			}
 
-			resp, err := client.ListLikedTweets(ctx, targetUserID, opts...)
-			if err != nil {
-				return err
+			// 7. 取得 & 8. 出力 (--all と outMode の組み合わせで分岐)。
+			if !all {
+				resp, err := client.ListLikedTweets(ctx, targetUserID, opts...)
+				if err != nil {
+					return err
+				}
+				return writeLikedSinglePage(cmd, resp, outMode)
 			}
-
-			// 6. 出力。
-			if noJSON {
-				return writeLikedHuman(cmd, resp)
-			}
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(resp)
+			return runLikedAll(cmd, client, ctx, targetUserID, opts, outMode)
 		},
 	}
 	cmd.Flags().StringVar(&userID, "user-id", "", "target user ID (default: authenticated user)")
 	cmd.Flags().StringVar(&startTime, "start-time", "", "earliest tweet time in RFC3339 (e.g. 2026-05-11T15:00:00Z)")
 	cmd.Flags().StringVar(&endTime, "end-time", "", "latest tweet time in RFC3339 (e.g. 2026-05-12T14:59:59Z)")
+	cmd.Flags().StringVar(&sinceJST, "since-jst", "", "JST date YYYY-MM-DD (overrides --start-time/--end-time)")
+	cmd.Flags().BoolVar(&yesterdayJST, "yesterday-jst", false, "fetch the previous JST day (overrides --since-jst)")
 	cmd.Flags().IntVar(&maxResults, "max-results", 100, "max tweets per page (1..100)")
 	cmd.Flags().StringVar(&paginationToken, "pagination-token", "", "resume from a previous page using next_token")
+	cmd.Flags().BoolVar(&all, "all", false, "auto-follow next_token until end or --max-pages")
+	cmd.Flags().IntVar(&maxPages, "max-pages", likedDefaultMaxPages, "max pages to fetch when --all is set")
 	cmd.Flags().BoolVar(&noJSON, "no-json", false, "output human-readable text instead of JSON")
+	cmd.Flags().BoolVar(&ndjson, "ndjson", false, "output line-delimited JSON (one tweet per line)")
+	cmd.Flags().StringVar(&tweetFields, "tweet-fields", likedDefaultTweetFields, "comma-separated tweet.fields")
+	cmd.Flags().StringVar(&expansions, "expansions", likedDefaultExpansions, "comma-separated expansions")
+	cmd.Flags().StringVar(&userFields, "user-fields", likedDefaultUserFields, "comma-separated user.fields")
 	return cmd
+}
+
+// decideOutputMode は --no-json / --ndjson から出力モードを決定する (D-1)。
+//
+// 両 true は ErrInvalidArgument で拒否する (排他制約)。
+// 既定 (両 false) は likedOutputModeJSON。
+func decideOutputMode(noJSON, ndjson bool) (likedOutputMode, error) {
+	if noJSON && ndjson {
+		return likedOutputModeJSON, fmt.Errorf("%w: --no-json and --ndjson are mutually exclusive", ErrInvalidArgument)
+	}
+	switch {
+	case ndjson:
+		return likedOutputModeNDJSON, nil
+	case noJSON:
+		return likedOutputModeHuman, nil
+	default:
+		return likedOutputModeJSON, nil
+	}
+}
+
+// jstLocation は JST (Asia/Tokyo) の *time.Location を返す (D-3)。
+//
+// `time.LoadLocation("Asia/Tokyo")` をまず試み、失敗時は固定 +9:00 オフセットへフォールバック
+// (zoneinfo データ未配置の minimal Linux / distroless / Lambda 等の保険)。
+func jstLocation() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Tokyo"); err == nil {
+		return loc
+	}
+	return time.FixedZone("JST", 9*3600)
+}
+
+// parseJSTDate は YYYY-MM-DD 形式の JST 日付を 0:00:00〜23:59:59 (JST) の time.Time 2 つで返す (D-2/D-4)。
+//
+// 戻り値の time.Time は内部表現は JST のままだが、xapi.WithStartTime/WithEndTime 内で
+// `.UTC().Format(time.RFC3339)` が呼ばれるため最終的なクエリは UTC 表現になる。
+// 例: --since-jst 2026-05-12 → start=2026-05-12T00:00:00+09:00 / end=2026-05-12T23:59:59+09:00
+// → UTC: 2026-05-11T15:00:00Z / 2026-05-12T14:59:59Z
+//
+// パース失敗時は ErrInvalidArgument を wrap して返却する (exit 2)。
+func parseJSTDate(s string) (start, end time.Time, err error) {
+	jst := jstLocation()
+	day, err := time.ParseInLocation("2006-01-02", s, jst)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("%w: --since-jst: %v", ErrInvalidArgument, err)
+	}
+	start = day
+	end = day.Add(24*time.Hour - time.Second)
+	return start, end, nil
+}
+
+// yesterdayJSTRange は与えられた基準時刻を JST に変換した上で「前日」の 0:00-23:59 範囲を返す。
+//
+// 基準時刻 (now) を JST に変換し、その JST 日付の前日に対して parseJSTDate を呼び出す。
+// テスト時に固定時刻を渡せるよう引数化している (CLI からは time.Now() を渡す)。
+func yesterdayJSTRange(now time.Time) (start, end time.Time, err error) {
+	jst := jstLocation()
+	y := now.In(jst).AddDate(0, 0, -1).Format("2006-01-02")
+	return parseJSTDate(y)
+}
+
+// splitCSV は csv 文字列を要素配列に分解する (D-9)。
+//
+// 要素ごとに strings.TrimSpace を適用し、結果が空文字列となる要素は除外する。
+// 入力が空文字列のときは長さ 0 の slice を返す。
+//
+// 注意 (D-10): pflag の `--tweet-fields ""` (明示空文字) と「フラグ未指定」(デフォルト値)
+// を区別する手段はない。実用上どちらでも CLI 側のデフォルト挙動として問題ないため
+// 区別しない方針 (M12 で config.toml 連携追加時に再評価する余地あり)。
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		t := strings.TrimSpace(p)
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// writeLikedSinglePage は --all=false 時の出力を担う共通ヘルパ。
+//
+// outMode に応じて:
+//   - JSON (既定): json.Encoder.Encode(resp) で {data, includes, meta} 全体を出力
+//   - Human: writeLikedHuman で 1 行/ツイート
+//   - NDJSON: resp.Data の各要素を 1 行 JSON で順次出力 (HTML エスケープ無効)
+func writeLikedSinglePage(cmd *cobra.Command, resp *xapi.LikedTweetsResponse, outMode likedOutputMode) error {
+	switch outMode {
+	case likedOutputModeHuman:
+		return writeLikedHuman(cmd, resp)
+	case likedOutputModeNDJSON:
+		if resp == nil {
+			return nil
+		}
+		return writeNDJSONTweets(cmd.OutOrStdout(), resp.Data)
+	default: // likedOutputModeJSON or unknown → JSON 既定
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(resp)
+	}
+}
+
+// runLikedAll は --all=true 時の取得 + 出力を担う共通ヘルパ。
+//
+// 出力モードで挙動を切替:
+//   - NDJSON: ストリーミング (callback 内で逐次 encode、集約しない、D-6)
+//   - JSON / Human: 全ページ集約して最後にまとめて出力 (D-8: meta は再構築)
+//
+//nolint:revive // ctx を引数に取るが、引数順は cobra の RunE 流儀に合わせる
+func runLikedAll(
+	cmd *cobra.Command,
+	client likedClient,
+	ctx context.Context,
+	userID string,
+	opts []xapi.LikedTweetsOption,
+	outMode likedOutputMode,
+) error {
+	if outMode == likedOutputModeNDJSON {
+		// ストリーミング (D-6): 集約しない、callback 内で即時 encode。
+		w := cmd.OutOrStdout()
+		return client.EachLikedPage(ctx, userID, func(p *xapi.LikedTweetsResponse) error {
+			if p == nil {
+				return nil
+			}
+			return writeNDJSONTweets(w, p.Data)
+		}, opts...)
+	}
+	// JSON / Human: 集約して最後に出力。
+	agg := &likedAggregator{}
+	if err := client.EachLikedPage(ctx, userID, agg.add, opts...); err != nil {
+		return err
+	}
+	resp := agg.build()
+	if outMode == likedOutputModeHuman {
+		return writeLikedHuman(cmd, resp)
+	}
+	return json.NewEncoder(cmd.OutOrStdout()).Encode(resp)
+}
+
+// likedAggregator は EachLikedPage の callback として複数ページを集約する内部構造体 (D-8)。
+//
+// 集約規則:
+//   - Data: 全ページの Tweet を append (重複排除しない)
+//   - Includes.Users / Includes.Tweets: 全ページの要素を append (重複排除しない)
+//   - Meta: build() 時に再構築 (ResultCount = len(Data), NextToken = "")
+//     最終ページの meta を流すと「全体件数か最終ページ件数か」が曖昧になるため明示的に再構築
+type likedAggregator struct {
+	data   []xapi.Tweet
+	users  []xapi.User
+	tweets []xapi.Tweet
+}
+
+// add は EachLikedPage callback として 1 ページ分の応答を集約する。
+func (a *likedAggregator) add(p *xapi.LikedTweetsResponse) error {
+	if p == nil {
+		return nil
+	}
+	a.data = append(a.data, p.Data...)
+	a.users = append(a.users, p.Includes.Users...)
+	a.tweets = append(a.tweets, p.Includes.Tweets...)
+	return nil
+}
+
+// build は集約結果を *xapi.LikedTweetsResponse として返す。
+// Meta は再構築 (result_count = 集約後の総件数, next_token = "")。
+func (a *likedAggregator) build() *xapi.LikedTweetsResponse {
+	return &xapi.LikedTweetsResponse{
+		Data: a.data,
+		Includes: xapi.Includes{
+			Users:  a.users,
+			Tweets: a.tweets,
+		},
+		Meta: xapi.Meta{
+			ResultCount: len(a.data),
+			NextToken:   "",
+		},
+	}
+}
+
+// writeNDJSONTweets は ツイート配列を NDJSON (1 ツイート 1 行 JSON) で書き出す (D-12)。
+//
+// SetEscapeHTML(false) を設定し `<`, `>`, `&` を生のまま出力する (X tweet text に頻出するため、
+// NDJSON consumer に余計な再変換コストを強いないため)。
+// データが空または nil なら何も書き出さない (改行のみも出さない)。
+func writeNDJSONTweets(w io.Writer, tweets []xapi.Tweet) error {
+	if len(tweets) == 0 {
+		return nil
+	}
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	for i := range tweets {
+		if err := enc.Encode(tweets[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeLikedHuman は --no-json 出力時の human フォーマット出力を担う。
