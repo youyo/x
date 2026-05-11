@@ -139,6 +139,122 @@ func TestIncludes_Unmarshal(t *testing.T) {
 	}
 }
 
+// TestTweet_Unmarshal_WithExtendedFields は M8 で追加した拡張フィールド
+// (entities / public_metrics / referenced_tweets) が Tweet にデコードされることを確認する。
+func TestTweet_Unmarshal_WithExtendedFields(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"id":"1",
+		"text":"hello #golang @alice https://t.co/abc",
+		"author_id":"42",
+		"created_at":"2026-05-12T12:00:00.000Z",
+		"entities":{
+			"urls":[{"start":21,"end":44,"url":"https://t.co/abc","expanded_url":"https://example.com/article","display_url":"example.com/article"}],
+			"hashtags":[{"start":6,"end":13,"tag":"golang"}],
+			"mentions":[{"start":14,"end":20,"username":"alice","id":"42"}],
+			"annotations":[{"start":6,"end":12,"probability":0.95,"type":"Other","normalized_text":"Go"}]
+		},
+		"public_metrics":{
+			"retweet_count":3,
+			"reply_count":4,
+			"like_count":100,
+			"quote_count":2,
+			"bookmark_count":7,
+			"impression_count":1234
+		},
+		"referenced_tweets":[
+			{"type":"retweeted","id":"999"}
+		]
+	}`)
+	var tw Tweet
+	if err := json.Unmarshal(raw, &tw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	// Entities
+	if tw.Entities == nil {
+		t.Fatal("Entities = nil, want non-nil")
+	}
+	if got := len(tw.Entities.URLs); got != 1 {
+		t.Fatalf("Entities.URLs len = %d, want 1", got)
+	}
+	if u := tw.Entities.URLs[0]; u.URL != "https://t.co/abc" || u.ExpandedURL != "https://example.com/article" {
+		t.Errorf("URLs[0] = %+v", u)
+	}
+	if got := len(tw.Entities.Hashtags); got != 1 || tw.Entities.Hashtags[0].Tag != "golang" {
+		t.Errorf("Hashtags = %+v", tw.Entities.Hashtags)
+	}
+	if got := len(tw.Entities.Mentions); got != 1 || tw.Entities.Mentions[0].Username != "alice" {
+		t.Errorf("Mentions = %+v", tw.Entities.Mentions)
+	}
+	if got := len(tw.Entities.Annotations); got != 1 || tw.Entities.Annotations[0].NormalizedText != "Go" {
+		t.Errorf("Annotations = %+v", tw.Entities.Annotations)
+	}
+
+	// PublicMetrics
+	if tw.PublicMetrics == nil {
+		t.Fatal("PublicMetrics = nil")
+	}
+	pm := tw.PublicMetrics
+	if pm.RetweetCount != 3 || pm.ReplyCount != 4 || pm.LikeCount != 100 || pm.QuoteCount != 2 {
+		t.Errorf("PublicMetrics core counts = %+v", pm)
+	}
+	if pm.BookmarkCount != 7 || pm.ImpressionCount != 1234 {
+		t.Errorf("PublicMetrics extra counts = %+v", pm)
+	}
+
+	// ReferencedTweets
+	if got := len(tw.ReferencedTweets); got != 1 {
+		t.Fatalf("ReferencedTweets len = %d, want 1", got)
+	}
+	if r := tw.ReferencedTweets[0]; r.Type != "retweeted" || r.ID != "999" {
+		t.Errorf("ReferencedTweets[0] = %+v", r)
+	}
+}
+
+// TestTweet_Unmarshal_Minimal_DoesNotPopulateExtended は M7 の最小レスポンスでも
+// M8 拡張フィールドが nil/空のまま (omitempty で互換性維持) であることを確認する。
+func TestTweet_Unmarshal_Minimal_DoesNotPopulateExtended(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"id":"1","text":"hello"}`)
+	var tw Tweet
+	if err := json.Unmarshal(raw, &tw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if tw.Entities != nil {
+		t.Errorf("Entities = %+v, want nil", tw.Entities)
+	}
+	if tw.PublicMetrics != nil {
+		t.Errorf("PublicMetrics = %+v, want nil", tw.PublicMetrics)
+	}
+	if tw.ReferencedTweets != nil {
+		t.Errorf("ReferencedTweets = %+v, want nil", tw.ReferencedTweets)
+	}
+}
+
+// TestIncludes_Unmarshal_WithTweets は M8 で追加した Includes.Tweets が
+// referenced_tweets.id expansion レスポンスをデコードできることを確認する。
+func TestIncludes_Unmarshal_WithTweets(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"users":[{"id":"42","username":"alice","name":"Alice"}],
+		"tweets":[{"id":"999","text":"original tweet","author_id":"7"}]
+	}`)
+	var inc Includes
+	if err := json.Unmarshal(raw, &inc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(inc.Tweets) != 1 {
+		t.Fatalf("Tweets len = %d, want 1", len(inc.Tweets))
+	}
+	if got := inc.Tweets[0]; got.ID != "999" || got.Text != "original tweet" || got.AuthorID != "7" {
+		t.Errorf("Tweets[0] = %+v", got)
+	}
+}
+
 // TestErrorResponse_Unmarshal は X API v2 のエラーレスポンス JSON が
 // ErrorResponse 構造体にデコードされることを確認する。
 func TestErrorResponse_Unmarshal(t *testing.T) {
