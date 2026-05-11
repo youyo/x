@@ -25,9 +25,9 @@
 
 ## Current Focus
 
-- **マイルストーン**: M1 (リポジトリ初期化 + Kong スケルトン + `x version`)
-- **直近の完了**: ロードマップ作成 + M1 詳細計画作成
-- **次のアクション**: 本計画承認後、`/devflow:implement` で M1 着手
+- **マイルストーン**: M9 (CLI `x me`)
+- **直近の完了**: M8 (internal/xapi/likes.go - ListLikedTweets + EachLikedPage + rate-limit aware ページネーション)
+- **次のアクション**: M9 の詳細計画作成と実装
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
@@ -99,12 +99,15 @@
 - 完了: 16 新規テスト (httptest + envelope + JSON unmarshal)、計 80+ テスト全 pass、lint 0 issues
 - 留意: User.ID の json タグは "id"、MCP 層 (M17) で "user_id" にリネームが必要
 
-#### M8: `internal/xapi/likes.go` (ListLikedTweets + ページネーション)
-- [ ] `ListLikedTweets(ctx, params)` シングルページ
-- [ ] `--all` 用の next_token 自動辿り iterator
-- [ ] `--max-pages` 上限
-- [ ] ページ間 sleep (rate-limit remaining ≤ 2 で reset まで待機)
-- 完了条件: 5 ページのモックレスポンスを全部辿り、429 → reset 待機 → 続きを取得する E2E テスト
+#### M8: `internal/xapi/likes.go` (ListLikedTweets + ページネーション) ✅ 完了 (commit: 2272f0b)
+- [x] types.go 拡張: Tweet.Entities / PublicMetrics / ReferencedTweets, Includes.Tweets, 関連 DTO (TweetURL/Tag/Mention/Annotation/PublicMetrics/Entities/ReferencedTweet)
+- [x] `ListLikedTweets(ctx, userID, opts...)` シングルページ (path escape + 全 Option クエリ反映 + envelope decode)
+- [x] `EachLikedPage(ctx, userID, fn, opts...)` callback 形式の next_token 自動辿り iterator
+- [x] `WithMaxPages(n)` 上限 (default 50) — 到達時は正常終了
+- [x] ページ間 rate-limit aware sleep (remaining ≤ 2 で reset まで待機, 最大 15min, ページ間最小 200ms, stale reset は 200ms フォールバック)
+- [x] Option 関数群: WithStartTime/WithEndTime (RFC3339 UTC, ナノ秒なし), WithMaxResults (0=no-op), WithPaginationToken, WithTweetFields, WithExpansions, WithLikedUserFields, WithMaxPages
+- 完了: 18 新規テスト (likes_test.go) + 3 拡張テスト (types_test.go), 計 100+ テスト全 pass, lint 0 issues, vet clean
+- 留意: WithMaxResults(0) は no-op (CLI 層 M10/M11 が default 100 を必ずセットする責務)。WithLikedUserFields は GetUserMe 用 WithUserFields とは型が異なる別関数。max_pages 到達時の truncated シグナル未提供 (将来 M11 で必要なら戻り値拡張)
 
 ### Phase C: CLI v0.1.0
 
