@@ -256,6 +256,264 @@ func verifyInitializeResult(t *testing.T, envelope map[string]any, wantName, wan
 	}
 }
 
+// TestRun_Healthz_Returns200OK は /healthz エンドポイントが 200 + "ok\n" を返すことを確認する。
+// LWA / Lambda 死活確認用エンドポイントの基本契約。
+func TestRun_Healthz_Returns200OK(t *testing.T) {
+	t.Parallel()
+
+	addr := freePort(t)
+	mcp := mcpinternal.NewServer(nil, "test")
+	srv := transporthttp.NewServer(mcp, transporthttp.WithAddr(addr))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- srv.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-runErr:
+		case <-time.After(3 * time.Second):
+		}
+	})
+
+	waitListening(t, addr, transporthttp.DefaultPath)
+
+	url := fmt.Sprintf("http://%s/healthz", addr)
+	req, err := stdhttp.NewRequestWithContext(context.Background(), stdhttp.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	client := &stdhttp.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != stdhttp.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if got := string(body); got != "ok\n" {
+		t.Errorf("body = %q, want %q", got, "ok\n")
+	}
+}
+
+// TestRun_WithHandlerMiddleware_AppliesMiddleware は WithHandlerMiddleware で
+// 渡された middleware が MCP handler に適用されることを確認する。
+// middleware が付与したヘッダがレスポンスに反映され、かつ inner の MCP 応答も
+// 正しく返ることで「middleware が先、handler が後」の順序を pin する。
+func TestRun_WithHandlerMiddleware_AppliesMiddleware(t *testing.T) {
+	t.Parallel()
+
+	addr := freePort(t)
+	mcpSrv := mcpserver.NewMCPServer(
+		mcpinternal.ServerName,
+		"1.2.3",
+		mcpserver.WithToolCapabilities(true),
+	)
+
+	markerMW := func(next stdhttp.Handler) stdhttp.Handler {
+		return stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+			w.Header().Set("X-Authgate-Test", "applied")
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	srv := transporthttp.NewServer(mcpSrv,
+		transporthttp.WithAddr(addr),
+		transporthttp.WithHandlerMiddleware(markerMW),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- srv.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-runErr:
+		case <-time.After(3 * time.Second):
+		}
+	})
+
+	waitListening(t, addr, transporthttp.DefaultPath)
+
+	url := fmt.Sprintf("http://%s%s", addr, transporthttp.DefaultPath)
+	payload := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"clientInfo":{"name":"test","version":"1.0.0"}}}`
+
+	req, err := stdhttp.NewRequestWithContext(context.Background(), stdhttp.MethodPost, url, strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	client := &stdhttp.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST initialize: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if got := resp.Header.Get("X-Authgate-Test"); got != "applied" {
+		t.Errorf("X-Authgate-Test header = %q, want %q (middleware not applied)", got, "applied")
+	}
+	if resp.StatusCode != stdhttp.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body=%s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	envelope := extractJSONRPCEnvelope(t, resp.Header.Get("Content-Type"), body)
+	verifyInitializeResult(t, envelope, "x", "1.2.3")
+}
+
+// TestRun_Healthz_BypassesMiddleware は設計不変条件をテストする:
+// 全リクエストを 401 にする middleware を挿しても /healthz は 200 を返す。
+// LWA 健全性確認が認証 middleware に阻まれる事故を防ぐため。
+func TestRun_Healthz_BypassesMiddleware(t *testing.T) {
+	t.Parallel()
+
+	addr := freePort(t)
+	mcp := mcpinternal.NewServer(nil, "test")
+
+	rejectAllMW := func(_ stdhttp.Handler) stdhttp.Handler {
+		return stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, _ *stdhttp.Request) {
+			w.WriteHeader(stdhttp.StatusUnauthorized)
+		})
+	}
+
+	srv := transporthttp.NewServer(mcp,
+		transporthttp.WithAddr(addr),
+		transporthttp.WithHandlerMiddleware(rejectAllMW),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- srv.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-runErr:
+		case <-time.After(3 * time.Second):
+		}
+	})
+
+	waitListening(t, addr, transporthttp.DefaultPath)
+
+	client := &stdhttp.Client{Timeout: 3 * time.Second}
+
+	// /healthz は middleware の外側にあるので 200 を返す
+	healthzURL := fmt.Sprintf("http://%s/healthz", addr)
+	hReq, err := stdhttp.NewRequestWithContext(context.Background(), stdhttp.MethodGet, healthzURL, nil)
+	if err != nil {
+		t.Fatalf("new healthz request: %v", err)
+	}
+	hResp, err := client.Do(hReq)
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	defer func() { _ = hResp.Body.Close() }()
+	if hResp.StatusCode != stdhttp.StatusOK {
+		t.Errorf("/healthz status = %d, want 200 (middleware must not affect /healthz)", hResp.StatusCode)
+	}
+
+	// /mcp は middleware が適用されるので 401 になる
+	mcpURL := fmt.Sprintf("http://%s%s", addr, transporthttp.DefaultPath)
+	mReq, err := stdhttp.NewRequestWithContext(context.Background(), stdhttp.MethodPost, mcpURL, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("new mcp request: %v", err)
+	}
+	mResp, err := client.Do(mReq)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = mResp.Body.Close() }()
+	if mResp.StatusCode != stdhttp.StatusUnauthorized {
+		t.Errorf("/mcp status = %d, want 401 (middleware should reject)", mResp.StatusCode)
+	}
+}
+
+// TestRun_NilMiddleware_Passthrough は WithHandlerMiddleware(nil) を渡しても
+// passthrough (M15 と同等の挙動) になることを確認する。
+func TestRun_NilMiddleware_Passthrough(t *testing.T) {
+	t.Parallel()
+
+	addr := freePort(t)
+	mcpSrv := mcpserver.NewMCPServer(
+		mcpinternal.ServerName,
+		"9.9.9",
+		mcpserver.WithToolCapabilities(true),
+	)
+	srv := transporthttp.NewServer(mcpSrv,
+		transporthttp.WithAddr(addr),
+		transporthttp.WithHandlerMiddleware(nil),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- srv.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-runErr:
+		case <-time.After(3 * time.Second):
+		}
+	})
+
+	waitListening(t, addr, transporthttp.DefaultPath)
+
+	url := fmt.Sprintf("http://%s%s", addr, transporthttp.DefaultPath)
+	payload := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"clientInfo":{"name":"test","version":"1.0.0"}}}`
+	req, err := stdhttp.NewRequestWithContext(context.Background(), stdhttp.MethodPost, url, strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	client := &stdhttp.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST initialize: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != stdhttp.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body=%s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	envelope := extractJSONRPCEnvelope(t, resp.Header.Get("Content-Type"), body)
+	verifyInitializeResult(t, envelope, "x", "9.9.9")
+}
+
 // TestRun_ReturnsListenError は既使用ポートへの bind で error が返ることを確認する。
 // 具体的な syscall.EADDRINUSE 比較は OS 依存のため避け、「非 nil error が短時間で返る」のみを契約とする。
 func TestRun_ReturnsListenError(t *testing.T) {

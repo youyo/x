@@ -38,6 +38,7 @@ type Server struct {
 	addr            string
 	path            string
 	shutdownTimeout time.Duration
+	handlerMW       func(stdhttp.Handler) stdhttp.Handler
 }
 
 // Option は Server の任意設定を表す関数オプションである。
@@ -59,6 +60,24 @@ func WithAddr(addr string) Option {
 func WithPath(path string) Option {
 	return func(s *Server) {
 		s.path = path
+	}
+}
+
+// WithHandlerMiddleware は MCP handler を任意の middleware でラップする Option である。
+//
+// 主な用途は authgate (none / apikey / idproxy) の挿し込みである。引数 mw が nil の
+// 場合は passthrough (本 Option を渡さなかった場合と等価) として扱う。
+//
+// /healthz エンドポイントはこの middleware の影響を受けず、常に認証なしで応答する
+// (LWA / Lambda 健全性確認用)。これは設計不変条件であり、テスト
+// TestRun_Healthz_BypassesMiddleware で pin している。
+//
+// 引数のシグネチャは authgate.Middleware インターフェースの Wrap メソッドと整合する。
+// 呼び出し側で `WithHandlerMiddleware(mw.Wrap)` のように渡すことを想定する。
+// 本パッケージは authgate に依存しない (循環依存防止)。
+func WithHandlerMiddleware(mw func(stdhttp.Handler) stdhttp.Handler) Option {
+	return func(s *Server) {
+		s.handlerMW = mw
 	}
 }
 
@@ -110,8 +129,16 @@ func (s *Server) ShutdownTimeout() time.Duration { return s.shutdownTimeout }
 func (s *Server) Run(ctx context.Context) error {
 	h := mcpserver.NewStreamableHTTPServer(s.mcp, mcpserver.WithEndpointPath(s.path))
 
+	var handler stdhttp.Handler = h
+	if s.handlerMW != nil {
+		handler = s.handlerMW(handler)
+	}
+
 	mux := stdhttp.NewServeMux()
-	mux.Handle(s.path, h)
+	mux.Handle(s.path, handler)
+	// /healthz は middleware の外側に常時公開する (LWA 健全性確認用)。
+	// 認証 middleware がどんな挙動でも /healthz は影響を受けない設計不変条件である。
+	mux.HandleFunc("/healthz", healthzHandler)
 
 	srv := &stdhttp.Server{
 		Addr:              s.addr,
@@ -140,4 +167,11 @@ func (s *Server) Run(ctx context.Context) error {
 		<-errCh
 		return nil
 	}
+}
+
+// healthzHandler は LWA / Lambda の死活確認用エンドポイントである。
+// 認証 middleware の外側に露出させ、常に 200 OK と body "ok\n" を返す。
+func healthzHandler(w stdhttp.ResponseWriter, _ *stdhttp.Request) {
+	w.WriteHeader(stdhttp.StatusOK)
+	_, _ = fmt.Fprintln(w, "ok")
 }
