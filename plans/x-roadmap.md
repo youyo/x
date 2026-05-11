@@ -74,11 +74,11 @@
 - 完了: BurntSushi/toml v1.6.0 追加、16 テストケース pass、計 41 テスト全 pass、lint 0 issues
 - TDD: t.Setenv + t.TempDir() で XDG パスを差し替えるテーブル駆動テスト
 
-#### M4: `internal/config` credentials.toml + guard
-- [ ] `internal/config/credentials.go` (perm 0600 強制、R/W)
-- [ ] `internal/config/guard.go` (config.toml にシークレット混入を拒否)
-- 完了条件: パーミッション緩い credentials.toml に警告、シークレットが config.toml に書かれていたらエラー
-- TDD: ファイル mode を `os.Chmod` で意図的に緩めて検査ロジックを試す
+#### M4: `internal/config` credentials.toml + guard ✅ 完了 (commit: 38bb199)
+- [x] `internal/config/credentials.go` (Credentials 型 + LoadCredentials + SaveCredentials + CheckPermissions + tmp+rename 原子書き換え)
+- [x] `internal/config/guard.go` (CheckConfigNoSecrets, 大文字小文字非依存、値漏洩防止)
+- 完了: perm 0700/0600 強制、11 新規テスト、計 50+ テスト全 pass、lint 0 issues、シークレット値漏洩テストで保証
+- API: Credentials{APIKey/APISecret/AccessToken/AccessTokenSecret}、ErrCredentialsNotFound/ErrPermissionsTooOpen/ErrSecretInConfig
 
 ### Phase B: X API クライアント
 
