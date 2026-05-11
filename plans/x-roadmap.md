@@ -128,12 +128,13 @@
 - 完了: 21 新規テスト全 pass、計 140+ テスト、lint 0 issues、`/tmp/x liked list --max-results 999` で exit 2 確認
 - 留意: `--user-id` 未指定 → GetUserMe で self の ID を解決 (D-2)。`WithMaxResults` は常に呼ぶ (default=100 を 0 に流さない D-3)。JSON 出力は `*xapi.LikedTweetsResponse` 全体を出して MCP `get_liked_tweets` のスキーマと整合 (D-4)
 
-#### M11: CLI `x liked list` 拡張
-- [ ] `--since-jst <YYYY-MM-DD>` / `--yesterday-jst`
-- [ ] `--all` + `--max-pages` (default 50)
-- [ ] NDJSON 出力 (`--ndjson`)
-- [ ] tweet/expansion/user fields のカスタマイズフラグ
-- 完了条件: `x liked list --yesterday-jst --all` で前日分を全取得
+#### M11: CLI `x liked list` 拡張 ✅ 完了 (commit: 8903589)
+- [x] `--since-jst <YYYY-MM-DD>` / `--yesterday-jst` (LoadLocation→FixedZone フォールバック)
+- [x] `--all` + `--max-pages` (default 50) + EachLikedPage 統合 + likedAggregator
+- [x] NDJSON 出力 (`--ndjson`, SetEscapeHTML(false), --all+NDJSON はストリーミング)
+- [x] tweet/expansion/user fields のカスタマイズフラグ + splitCSV trim + 空要素除外
+- 完了: 18 新規テスト、計 41+ CLI テスト、優先順位 yesterday-jst > since-jst > start/end、--no-json と --ndjson 排他 (exit 2)
+- 留意: ハードコードのデフォルト値は M12 で config.toml [liked] 連携に移管予定
 
 #### M12: CLI `x configure` + `x completion` 拡張
 - [ ] 対話モード (XDG パス 2 ファイル生成)
