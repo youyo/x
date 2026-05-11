@@ -14,7 +14,7 @@ const ServerName = "x"
 //
 // 構築時に tool capability を宣言した上で、登録済み tools を順次差し込む:
 //   - M17: get_user_me (registerToolMe)
-//   - M18 以降: get_liked_tweets 等が追加予定
+//   - M18: get_liked_tweets (registerToolLikes)
 //
 // 引数:
 //   - client: X API 呼び出しに利用する xapi.Client。nil でも登録自体は成功する
@@ -28,5 +28,6 @@ func NewServer(client *xapi.Client, version string) *mcpserver.MCPServer {
 		mcpserver.WithToolCapabilities(true),
 	)
 	registerToolMe(s, client)
+	registerToolLikes(s, client)
 	return s
 }
