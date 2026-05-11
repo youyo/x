@@ -1,0 +1,36 @@
+{
+  "FunctionName": "x-mcp",
+  "Description": "x MCP server on Lambda Function URL",
+  "Runtime": "provided.al2023",
+  "Handler": "bootstrap",
+  "Architectures": ["arm64"],
+  "MemorySize": 256,
+  "Timeout": 30,
+  "Role": "{{ must_env `ROLE_ARN` }}",
+  "Layers": [
+    "arn:aws:lambda:{{ must_env `AWS_REGION` }}:753240598075:layer:LambdaAdapterLayerArm64:27"
+  ],
+  "Environment": {
+    "Variables": {
+      "X_API_KEY":              "{{ ssm `/x-mcp/x_api_key` }}",
+      "X_API_SECRET":           "{{ ssm `/x-mcp/x_api_secret` }}",
+      "X_ACCESS_TOKEN":         "{{ ssm `/x-mcp/x_access_token` }}",
+      "X_ACCESS_TOKEN_SECRET":  "{{ ssm `/x-mcp/x_access_token_secret` }}",
+
+      "X_MCP_AUTH":             "{{ env `X_MCP_AUTH` `idproxy` }}",
+      "X_MCP_API_KEY":          "{{ env `X_MCP_API_KEY` `` }}",
+
+      "OIDC_ISSUER":            "{{ env `OIDC_ISSUER` `` }}",
+      "OIDC_CLIENT_ID":         "{{ env `OIDC_CLIENT_ID` `` }}",
+      "OIDC_CLIENT_SECRET":     "{{ ssm `/x-mcp/oidc_client_secret` }}",
+      "COOKIE_SECRET":          "{{ ssm `/x-mcp/cookie_secret` }}",
+      "EXTERNAL_URL":           "{{ must_env `EXTERNAL_URL` }}",
+
+      "STORE_BACKEND":          "{{ env `STORE_BACKEND` `dynamodb` }}",
+      "DYNAMODB_TABLE_NAME":    "{{ env `DYNAMODB_TABLE_NAME` `x-mcp-idproxy` }}",
+      "AWS_REGION":             "{{ must_env `AWS_REGION` }}",
+
+      "LOG_LEVEL":              "{{ env `LOG_LEVEL` `info` }}"
+    }
+  }
+}
