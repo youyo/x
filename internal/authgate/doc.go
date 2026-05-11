@@ -7,19 +7,23 @@
 //   - apikey:  Bearer token を共有シークレットと定数時間比較する。CI / Routine
 //     からの呼び出しを想定する。
 //   - idproxy: OIDC ベースの session 認証。本番想定。memory / sqlite / redis /
-//     dynamodb の 4 store backend をサポートする計画。M22 までで memory / sqlite /
-//     redis を実装済み、dynamodb は M23 で追加する。
+//     dynamodb の 4 store backend を全てサポートする (M23 で全実装完了)。
 //
 // 本パッケージは [Middleware] interface と [New] ファクトリを公開し、モード値は
 // [Mode] 型の定数 ([ModeNone] / [ModeAPIKey] / [ModeIDProxy]) として表現する。
 //
-// M22 までで 3 モード全実装済み。[ModeIDProxy] については M20 で memory store、
-// M21 で sqlite store ([NewSQLiteStore])、M22 で redis store ([NewRedisStore]) を
-// 実装し、dynamodb は M23 で追加する。sqlite store は POSIX 環境において起動時に
+// M23 までで 3 モード + 4 store backend を全実装済み。[ModeIDProxy] については
+// M20 で memory store ([NewMemoryStore])、M21 で sqlite store ([NewSQLiteStore])、
+// M22 で redis store ([NewRedisStore])、M23 で dynamodb store
+// ([NewDynamoDBStore]) を順次実装した。sqlite store は POSIX 環境において起動時に
 // メイン DB ファイルおよび WAL サイドカー (`-wal` / `-shm`) を 0600 へ chmod する
 // (best-effort、Windows では静かに無視)。redis store は spec §11 の `REDIS_URL`
 // (例: `redis://localhost:6379/0`) を [github.com/redis/go-redis/v9.ParseURL] で
-// 解析し、TLS は `rediss://` スキームで自動有効化する。また、
+// 解析し、TLS は `rediss://` スキームで自動有効化する。dynamodb store は spec §11 の
+// `DYNAMODB_TABLE_NAME` / `AWS_REGION` を引数として受け取り、AWS SDK v2 の credential
+// 解決は lazy (最初の API call 時) のためコンストラクタは AWS account / credential
+// 無しでも成功する。session / authcode の Get は ConsistentRead=true 固定で、TTL は
+// DynamoDB ネイティブ TTL + アプリ側二重チェックで保護する (上流実装)。また、
 // 現状の idproxy 統合は `idproxy.Config.OAuth = nil` 固定で **ブラウザ cookie session
 // 認証のみ** を提供し、OAuth 2.1 AS / Bearer JWT 検証は未対応である (機械実行は
 // [ModeAPIKey] を利用すること)。サポート外のモードに対しては [ErrUnsupportedMode]
@@ -70,6 +74,22 @@
 //	// idproxy モード (redis store, 軽量サーバー / 複数インスタンス向け)
 //	store, err := authgate.NewRedisStore(os.Getenv("REDIS_URL"))
 //	if err != nil { /* ErrRedisURLRequired 等を処理 */ }
+//	defer store.Close()
+//	mw, err = authgate.New(authgate.ModeIDProxy,
+//	    authgate.WithOIDCIssuer(os.Getenv("OIDC_ISSUER")),
+//	    authgate.WithOIDCClientID(os.Getenv("OIDC_CLIENT_ID")),
+//	    authgate.WithOIDCClientSecret(os.Getenv("OIDC_CLIENT_SECRET")),
+//	    authgate.WithCookieSecret(os.Getenv("COOKIE_SECRET")),
+//	    authgate.WithExternalURL(os.Getenv("EXTERNAL_URL")),
+//	    authgate.WithIDProxyStore(store),
+//	)
+//
+//	// idproxy モード (dynamodb store, Lambda マルチコンテナ向け)
+//	store, err := authgate.NewDynamoDBStore(
+//	    os.Getenv("DYNAMODB_TABLE_NAME"),
+//	    os.Getenv("AWS_REGION"),
+//	)
+//	if err != nil { /* ErrDynamoDBTableRequired / ErrDynamoDBRegionRequired 等を処理 */ }
 //	defer store.Close()
 //	mw, err = authgate.New(authgate.ModeIDProxy,
 //	    authgate.WithOIDCIssuer(os.Getenv("OIDC_ISSUER")),
