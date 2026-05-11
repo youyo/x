@@ -1,0 +1,77 @@
+# golangci-lint v2 設定ファイル
+#
+# v1 系との非互換点:
+#   - linters-settings → linters.settings に移動
+#   - gofmt / gofumpt / gci / goimports は linters.enable → formatters.enable に移動
+#   - 詳細は https://golangci-lint.run/docs/product/migration-guide
+#
+# 設計方針:
+#   - linters.default: none で全 OFF し、必要な linter のみ明示 enable
+#     (将来の golangci-lint バージョンアップで意図せず違反が増えないように)
+#   - revive は exported / package-comments を含めて Go 公開シンボルに doc コメント必須
+#   - gocritic は hugeParam / rangeValCopy を将来の DTO 設計対応のため off
+#   - テストファイルでは errcheck / gocritic を緩和
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - revive
+    - gocritic
+    - misspell
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: indent-error-flow
+        - name: unexported-return
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: errorf
+        - name: increment-decrement
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocritic
+      - path: cmd/
+        linters:
+          - revive
+        text: "package-comments"
+
+formatters:
+  enable:
+    - gofumpt
+  settings:
+    gofumpt:
+      module-path: github.com/youyo/x
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

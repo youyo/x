@@ -1,0 +1,37 @@
+# Git (commit SHA は --build-arg COMMIT 経由で渡す)
+.git/
+.gitignore
+.gitattributes
+
+# ビルド成果物
+/x
+/dist/
+*.test
+*.out
+coverage.out
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# ドキュメント / 計画 (build に不要 / README 編集でキャッシュを飛ばさない)
+docs/
+plans/
+*.md
+
+# CI 設定 (build に不要)
+.github/
+.golangci.yml
+
+# Go workspace (vendor 不使用)
+go.work
+go.work.sum
+vendor/
+
+# シークレット類 (誤って image に焼かないためのガード)
+credentials.toml
+.env
+.env.*
+!.env.example

@@ -1,0 +1,95 @@
+# CI ワークフロー
+#
+# トリガー: main へのプッシュ / main 宛 PR
+# ジョブ: lint / test / build / docker の 4 並列ジョブ
+#
+# 設計判断:
+#   - LANG=C を env トップレベルで固定する。M1 で確立した isArgumentError 判定は
+#     Cobra のエラーメッセージ文字列マッチ (英語ロケール前提) に依存しており、
+#     CI ロケールが日本語等になると `unknown command` 接頭辞検出が失敗する。
+#   - 4 ジョブを並列実行することで CI 完走時間を短縮する。Docker ジョブは
+#     ホスト toolchain を使わないため lint/test と独立に走らせる。
+#   - golangci/golangci-lint-action は v9 系で golangci-lint v2 設定 (.golangci.yml の
+#     version: "2") を正式サポート。v6/v7/v8 は v1 系設定のみ受け付ける。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  # 将来の golangci-lint-action 機能拡張 (PR 上での違反箇所表示等) に備えて付与。
+  # only-new-issues で PR コメント投稿を有効化する場合は write が必要だが、
+  # 本ワークフローでは未使用のため最小権限の read のみとする。
+  pull-requests: read
+
+env:
+  GO_VERSION: "1.26.1"
+  # M1 hand-off: cmd/x/main.go の isArgumentError が英語ロケール依存。
+  # CI ロケールを C に固定して Cobra のエラーメッセージ言語を安定化させる。
+  LANG: "C"
+
+jobs:
+  lint:
+    name: Lint (golangci-lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11
+          args: --timeout=5m
+
+  test:
+    name: Test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: go test
+        run: go test -race -count=1 ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: go build
+        run: go build ./...
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: x:ci
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+            DATE=${{ github.run_started_at }}
+      - name: Smoke test (x version)
+        run: docker run --rm x:ci version
