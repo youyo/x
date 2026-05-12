@@ -127,6 +127,74 @@ Or as NDJSON for piping:
 x liked list --yesterday-jst --all --ndjson | jq -r '.id + " " + .text'
 ```
 
+## CLI Recipes
+
+### Common `x me` patterns
+
+```bash
+# JSON (default) — pipe into jq
+x me | jq -r '.username'
+
+# Human-readable single line for shell scripts
+x me --no-json
+# → id=12345 username=yourname name=Your Name
+```
+
+### Fetching Liked posts
+
+```bash
+# Single page (up to 100 posts)
+x liked list --max-results 100
+
+# Specific date range (UTC RFC3339)
+x liked list \
+  --start-time 2026-05-10T00:00:00Z \
+  --end-time   2026-05-10T23:59:59Z
+
+# Yesterday in JST (auto-converts to UTC range, fetches all pages)
+x liked list --yesterday-jst --all
+
+# Custom JST date
+x liked list --since-jst 2026-05-10 --all
+
+# Limit pages when piping into LLM context (avoid runaway costs)
+x liked list --yesterday-jst --all --max-pages 5
+
+# Custom fields (e.g. include retweet/like counts and entities)
+x liked list --yesterday-jst --all \
+  --tweet-fields "id,text,author_id,created_at,public_metrics,entities" \
+  --expansions   "author_id" \
+  --user-fields  "username,name,verified"
+
+# Stream as NDJSON (one tweet per line) for piping into jq / xargs / LLMs
+x liked list --yesterday-jst --all --ndjson \
+  | jq -r '"- [\(.text | gsub("\n"; " ") | .[0:80])](https://x.com/i/web/status/\(.id))"'
+```
+
+### Inspecting / verifying your configuration
+
+```bash
+x configure --print-paths
+# {
+#   "config":      "/home/you/.config/x/config.toml",
+#   "credentials": "/home/you/.local/share/x/credentials.toml",
+#   "data_dir":    "/home/you/.local/share/x"
+# }
+
+x configure --check
+# Validates credentials.toml permissions (0600) and the absence of secrets in config.toml.
+```
+
+### Use with Claude Code
+
+```bash
+# Add CLI to a local Claude Code session for one-off use
+echo '{"x":{"command":"x","args":["mcp","--auth","none","--host","127.0.0.1","--port","18080"]}}' \
+  > ~/.config/claude/mcp.json
+```
+
+For a persistent remote setup, deploy via `examples/lambroll/` and add the Function URL as a Claude Code Routines connector — see [`docs/routine-prompt.md`](docs/routine-prompt.md).
+
 ## Quick Start (MCP server)
 
 The `x mcp` subcommand starts a [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) MCP server. Three auth modes are available. In MCP mode, **all secrets must come from environment variables** — `credentials.toml` is never read.
@@ -188,6 +256,68 @@ Store backends:
 |---|---|
 | `get_user_me` | Returns `{ user_id, username, name }` for the OAuth 1.0a user. |
 | `get_liked_tweets` | Returns Liked posts with full pagination (`all=true`, `max_pages`, rate-limit aware). Accepts `user_id`, `start_time` / `end_time`, `since_jst`, `yesterday_jst`, `max_results`, `tweet_fields`, `expansions`, `user_fields`. JST helpers take precedence: `yesterday_jst > since_jst > start_time/end_time` (matches the CLI). |
+
+### MCP client recipes
+
+#### From `curl` (raw Streamable HTTP / JSON-RPC 2.0)
+
+```bash
+# 1) initialize handshake
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+    "protocolVersion":"2025-03-26",
+    "capabilities":{},
+    "clientInfo":{"name":"curl","version":"1.0"}}}'
+
+# 2) list available tools
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+# 3) call get_user_me
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call",
+       "params":{"name":"get_user_me","arguments":{}}}'
+
+# 4) call get_liked_tweets (yesterday JST, all pages)
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call",
+       "params":{"name":"get_liked_tweets",
+         "arguments":{"yesterday_jst":true,"all":true,"max_pages":5}}}'
+```
+
+With `--auth apikey`, add `-H "Authorization: Bearer <token>"` to every request.
+
+#### From Claude Code Routines
+
+1. Deploy via `examples/lambroll/` (see [`examples/lambroll/README.md`](examples/lambroll/README.md))
+2. In Claude Code Routines, add the deployed Function URL as a connector
+3. Use the prompt template in [`docs/routine-prompt.md`](docs/routine-prompt.md) — it covers fetching yesterday's Liked posts, judging technical relevance, and creating Backlog issues with duplicate detection
+
+#### From mark3labs/mcp-go (Go client)
+
+```go
+import "github.com/mark3labs/mcp-go/client"
+
+c, _ := client.NewStreamableHttpClient("http://127.0.0.1:8080/mcp")
+c.Start(ctx)
+defer c.Close()
+
+_, _ = c.Initialize(ctx, mcp.InitializeRequest{...})
+result, _ := c.CallTool(ctx, mcp.CallToolRequest{
+    Params: mcp.CallToolParams{
+        Name:      "get_liked_tweets",
+        Arguments: map[string]any{"yesterday_jst": true, "all": true},
+    },
+})
+```
 
 ## Configuration
 
@@ -299,6 +429,21 @@ When set, environment variables take precedence over file-based credentials.
 | `3` | Authentication error (X API `401`, missing credentials) |
 | `4` | Permission error (X API `403`) |
 | `5` | Not found (X API `404`) |
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `x me` exits with code `3` ("credentials are required") | `X_API_*` env vars not set and `credentials.toml` not found | `x configure` to create `credentials.toml`, or `export X_API_KEY=...` etc. Run `x configure --check` to verify. |
+| `x me` exits with code `3` ("401 Unauthorized") | OAuth 1.0a tokens invalid / regenerated on X Developer Portal | Re-issue tokens from the Developer Portal and re-run `x configure`. |
+| `x liked list` exits with code `4` (Permission) | `403`: account suspended or missing read scope | Check the Developer App permissions include **Read** at minimum. |
+| `x liked list --all` takes very long | Rate-limit hit, `x` is sleeping until `x-rate-limit-reset` | Expected. Cap with `--max-pages 5` if needed. |
+| `x liked list` returns `meta.result_count = 0` | `start_time` / `end_time` window does not match any Likes, or your account has no Likes in that range | Try `x liked list` without time filters to verify connectivity. |
+| `x mcp` exits with code `3` immediately ("X_MCP_API_KEY is required") | `--auth apikey` selected but `X_MCP_API_KEY` env var not set | Set `X_MCP_API_KEY=$(openssl rand -hex 32)` and re-launch. |
+| MCP client gets `401` from `/mcp` | Wrong `Authorization` header or `idproxy` cookie expired | apikey: verify `Bearer <token>`. idproxy: browser-authenticate via `EXTERNAL_URL` first. |
+| MCP client gets `404` on a path | Server mounts MCP on `/mcp` only by default | Either use the default path or set `--path` / `X_MCP_PATH`. |
+| Where are config / credential files? | XDG-resolved at runtime | `x configure --print-paths` |
+| Routines connector refuses connection | Function URL not public or `EXTERNAL_URL` mismatched the OIDC callback registration | See [`examples/lambroll/README.md`](examples/lambroll/README.md) trouble-shooting section. |
 
 ## Documentation
 

@@ -127,6 +127,75 @@ NDJSON でパイプしたい場合:
 x liked list --yesterday-jst --all --ndjson | jq -r '.id + " " + .text'
 ```
 
+## CLI レシピ集
+
+### `x me` の典型例
+
+```bash
+# JSON (デフォルト) — jq でパイプ
+x me | jq -r '.username'
+
+# シェルスクリプト用に human-readable な 1 行
+x me --no-json
+# → id=12345 username=yourname name=Your Name
+```
+
+### Liked Post の取得
+
+```bash
+# シングルページ (最大 100 件)
+x liked list --max-results 100
+
+# 日時範囲指定 (UTC RFC3339)
+x liked list \
+  --start-time 2026-05-10T00:00:00Z \
+  --end-time   2026-05-10T23:59:59Z
+
+# JST 前日 (UTC レンジへ自動換算、全ページ取得)
+x liked list --yesterday-jst --all
+
+# JST 任意日
+x liked list --since-jst 2026-05-10 --all
+
+# LLM のコンテキストにパイプするときの暴走防止
+x liked list --yesterday-jst --all --max-pages 5
+
+# カスタムフィールド (公開メトリクス + entities など)
+x liked list --yesterday-jst --all \
+  --tweet-fields "id,text,author_id,created_at,public_metrics,entities" \
+  --expansions   "author_id" \
+  --user-fields  "username,name,verified"
+
+# NDJSON ストリーミング (1 tweet / 1 行) を jq / xargs / LLM に流し込む
+x liked list --yesterday-jst --all --ndjson \
+  | jq -r '"- [\(.text | gsub("\n"; " ") | .[0:80])](https://x.com/i/web/status/\(.id))"'
+```
+
+### 設定の確認・検証
+
+```bash
+x configure --print-paths
+# {
+#   "config":      "/home/you/.config/x/config.toml",
+#   "credentials": "/home/you/.local/share/x/credentials.toml",
+#   "data_dir":    "/home/you/.local/share/x"
+# }
+
+x configure --check
+# credentials.toml のパーミッション (0600) と
+# config.toml にシークレットが混入していないかを検証する。
+```
+
+### Claude Code との連携
+
+```bash
+# ローカル Claude Code セッションに一時的に追加
+echo '{"x":{"command":"x","args":["mcp","--auth","none","--host","127.0.0.1","--port","18080"]}}' \
+  > ~/.config/claude/mcp.json
+```
+
+恒久的にリモート利用したい場合は `examples/lambroll/` でデプロイし、Function URL を Claude Code Routines のコネクターに登録する — [`docs/routine-prompt.md`](docs/routine-prompt.md) を参照。
+
 ## クイックスタート (MCP サーバー)
 
 `x mcp` サブコマンドは [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) MCP サーバーを起動する。3 種類の認証モードに対応する。**MCP モードではシークレットは必ず環境変数から読み込み**、`credentials.toml` は一切読まない。
@@ -188,6 +257,68 @@ AWS_REGION=ap-northeast-1 \
 |---|---|
 | `get_user_me` | OAuth 1.0a ユーザーの `{ user_id, username, name }` を返す。 |
 | `get_liked_tweets` | Liked Posts を全ページング (`all=true`, `max_pages`, rate-limit aware) 込みで返す。`user_id` / `start_time` / `end_time` / `since_jst` / `yesterday_jst` / `max_results` / `tweet_fields` / `expansions` / `user_fields` を受け取る。JST ヘルパの優先順位は `yesterday_jst > since_jst > start_time/end_time` (CLI と統一)。 |
+
+### MCP クライアントレシピ
+
+#### `curl` から (生 Streamable HTTP / JSON-RPC 2.0)
+
+```bash
+# 1) initialize ハンドシェイク
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+    "protocolVersion":"2025-03-26",
+    "capabilities":{},
+    "clientInfo":{"name":"curl","version":"1.0"}}}'
+
+# 2) tools 一覧
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+# 3) get_user_me 呼び出し
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call",
+       "params":{"name":"get_user_me","arguments":{}}}'
+
+# 4) get_liked_tweets 呼び出し (前日 JST、全ページ)
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call",
+       "params":{"name":"get_liked_tweets",
+         "arguments":{"yesterday_jst":true,"all":true,"max_pages":5}}}'
+```
+
+`--auth apikey` の場合は各リクエストに `-H "Authorization: Bearer <token>"` を追加する。
+
+#### Claude Code Routines から
+
+1. `examples/lambroll/` でデプロイ ([`examples/lambroll/README.md`](examples/lambroll/README.md) 参照)
+2. Claude Code Routines でデプロイした Function URL をコネクターとして登録
+3. [`docs/routine-prompt.md`](docs/routine-prompt.md) のプロンプト雛形を使用 — 前日 Liked 取得、技術判定、重複検出付きで Backlog 課題を起票する一連の指示を含む
+
+#### mark3labs/mcp-go から (Go クライアント)
+
+```go
+import "github.com/mark3labs/mcp-go/client"
+
+c, _ := client.NewStreamableHttpClient("http://127.0.0.1:8080/mcp")
+c.Start(ctx)
+defer c.Close()
+
+_, _ = c.Initialize(ctx, mcp.InitializeRequest{...})
+result, _ := c.CallTool(ctx, mcp.CallToolRequest{
+    Params: mcp.CallToolParams{
+        Name:      "get_liked_tweets",
+        Arguments: map[string]any{"yesterday_jst": true, "all": true},
+    },
+})
+```
 
 ## 設定
 
@@ -299,6 +430,21 @@ access_token_secret = "..."
 | `3` | 認証エラー (X API `401`、クレデンシャル欠落) |
 | `4` | 権限エラー (X API `403`) |
 | `5` | 見つからない (X API `404`) |
+
+## トラブルシュート
+
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| `x me` が exit 3 (「クレデンシャル不足」) | `X_API_*` env 未設定かつ `credentials.toml` 不在 | `x configure` で `credentials.toml` 生成、または `export X_API_KEY=...` 等。`x configure --check` で検証可 |
+| `x me` が exit 3 (`401 Unauthorized`) | X Developer Portal でトークン再発行された | Developer Portal でトークンを再発行し `x configure` をやり直す |
+| `x liked list` が exit 4 (Permission) | `403`: アカウント凍結または Read scope 不足 | Developer App の権限に少なくとも **Read** が含まれているか確認 |
+| `x liked list --all` がとても遅い | レートリミットに当たり `x-rate-limit-reset` まで sleep 中 | 想定動作。必要なら `--max-pages 5` で上限を切る |
+| `x liked list` の `meta.result_count = 0` | `start_time` / `end_time` の窓に Like が無い、または期間内に Like していない | 時間フィルタなしの `x liked list` で接続性を先に確認 |
+| `x mcp` が起動直後に exit 3 (「X_MCP_API_KEY が必要」) | `--auth apikey` 指定だが `X_MCP_API_KEY` 未設定 | `X_MCP_API_KEY=$(openssl rand -hex 32)` をセットして再起動 |
+| MCP クライアントが `/mcp` から `401` を受ける | `Authorization` ヘッダの誤り、または `idproxy` cookie 失効 | apikey: `Bearer <token>` を確認。idproxy: ブラウザで `EXTERNAL_URL` にアクセスして再認証 |
+| MCP クライアントが特定パスで `404` | サーバーは既定で `/mcp` のみマウント | 既定パスを使うか `--path` / `X_MCP_PATH` を明示 |
+| 設定 / クレデンシャルファイルの場所が分からない | 実行時に XDG パスを解決 | `x configure --print-paths` で確認 |
+| Routines コネクターが接続を拒否される | Function URL 非公開、または `EXTERNAL_URL` と OIDC コールバック登録が不一致 | [`examples/lambroll/README.md`](examples/lambroll/README.md) のトラブルシュート節を参照 |
 
 ## ドキュメント
 
