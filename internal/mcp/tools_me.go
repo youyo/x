@@ -77,7 +77,7 @@ func NewGetUserMeHandler(client *xapi.Client) mcpserver.ToolHandlerFunc {
 func registerToolMe(s *mcpserver.MCPServer, client *xapi.Client) {
 	tool := gomcp.NewTool(
 		"get_user_me",
-		gomcp.WithDescription("認証済みユーザー (自分) の user_id / username / name を取得する。"),
+		gomcp.WithDescription("Retrieve user_id, username, and name for the authenticated user (self)."),
 	)
 	s.AddTool(tool, NewGetUserMeHandler(client))
 }
