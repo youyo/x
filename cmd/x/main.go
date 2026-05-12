@@ -52,7 +52,7 @@ func main() {
 func run() int {
 	root := cli.NewRootCmd()
 	if err := root.ExecuteContext(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		switch {
 		case isArgumentError(err):
 			return app.ExitArgumentError
