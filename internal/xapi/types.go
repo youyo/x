@@ -123,7 +123,7 @@ type TweetURL struct {
 	// ExpandedURL は短縮を展開した実 URL。
 	ExpandedURL string `json:"expanded_url,omitempty"`
 	// DisplayURL はユーザーに表示される短縮表示 URL。
-	DisplayURL string `json:"display_url,omitempty"`
+	DisplayURL string `json:"-"`
 }
 
 // TweetTag は本文中のハッシュタグエンティティを表す DTO である。
