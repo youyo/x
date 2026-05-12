@@ -1,14 +1,15 @@
 # CI ワークフロー
 #
 # トリガー: main へのプッシュ / main 宛 PR
-# ジョブ: lint / test / build / docker の 4 並列ジョブ
+# ジョブ: lint / test / build の 3 並列ジョブ
 #
 # 設計判断:
 #   - LANG=C を env トップレベルで固定する。M1 で確立した isArgumentError 判定は
 #     Cobra のエラーメッセージ文字列マッチ (英語ロケール前提) に依存しており、
 #     CI ロケールが日本語等になると `unknown command` 接頭辞検出が失敗する。
-#   - 4 ジョブを並列実行することで CI 完走時間を短縮する。Docker ジョブは
-#     ホスト toolchain を使わないため lint/test と独立に走らせる。
+#   - Docker image build は release.yml の GoReleaser に一元化 (Dockerfile は
+#     prebuilt バイナリを COPY するだけの構造のため、ci で go build → docker build
+#     する 2 段は冗長)。CI では go build のみ検証する。
 #   - golangci/golangci-lint-action は v9 系で golangci-lint v2 設定 (.golangci.yml の
 #     version: "2") を正式サポート。v6/v7/v8 は v1 系設定のみ受け付ける。
 
@@ -72,24 +73,3 @@ jobs:
           cache: true
       - name: go build
         run: go build ./...
-
-  docker:
-    name: Docker build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          load: true
-          tags: x:ci
-          build-args: |
-            VERSION=ci
-            COMMIT=${{ github.sha }}
-            DATE=${{ github.run_started_at }}
-      - name: Smoke test (x version)
-        run: docker run --rm x:ci version
