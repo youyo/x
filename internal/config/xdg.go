@@ -16,7 +16,7 @@ const configFileName = "config.toml"
 
 // ErrHomeNotResolved は $XDG_CONFIG_HOME / $XDG_DATA_HOME と $HOME のいずれも
 // 解決できなかった極端な状況で返す番兵エラー。CI / 開発機では通常到達しない。
-var ErrHomeNotResolved = errors.New("HOME ディレクトリを解決できませんでした")
+var ErrHomeNotResolved = errors.New("HOME directory could not be resolved")
 
 // Dir は CLI 非機密設定ファイルを置くディレクトリ ($XDG_CONFIG_HOME/x など) を返す。
 //

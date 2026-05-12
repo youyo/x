@@ -96,7 +96,7 @@ default_user_fields = "username"
 			writeFile: true,
 			body:      "[cli\noutput = \"json\"\n", // 角括弧未閉
 			wantErr:   true,
-			errSubstr: "デコード",
+			errSubstr: "decode",
 		},
 		{
 			name:      "unknown_keys_ignored",

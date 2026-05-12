@@ -18,13 +18,13 @@ const credentialsFileName = "credentials.toml"
 
 // ErrCredentialsNotFound は credentials.toml が存在しない場合に返される番兵エラー。
 // errors.Is で判別可能。呼び出し側 (M9 の CLI 統合) が exit code 3 (AuthError) にマップする想定。
-var ErrCredentialsNotFound = errors.New("credentials.toml が見つかりません")
+var ErrCredentialsNotFound = errors.New("credentials.toml not found")
 
 // ErrPermissionsTooOpen は credentials.toml のパーミッションが他者にも読める状態のときに返される。
 // 「他者にも読める」= group / other のいずれかのビットが立っている状態
 // (= mode & 0o077 != 0)。spec §10「0600 でなければ警告」のうち、
 // より厳しい 0400 / 0500 等は許容する解釈で実装している。
-var ErrPermissionsTooOpen = errors.New("credentials.toml のパーミッションが緩すぎます (0600 推奨)")
+var ErrPermissionsTooOpen = errors.New("credentials.toml permissions too open (0600 recommended)")
 
 // Credentials は credentials.toml の [xapi] セクションを表す。
 //
@@ -84,7 +84,7 @@ func LoadCredentials(path string) (*Credentials, error) {
 
 	var file credentialsFile
 	if _, err := toml.DecodeFile(path, &file); err != nil {
-		return nil, fmt.Errorf("credentials.toml のデコードに失敗 (%s): %w", path, err)
+		return nil, fmt.Errorf("decode credentials.toml (%s): %w", path, err)
 	}
 	creds := file.XAPI
 	return &creds, nil
@@ -103,40 +103,40 @@ func LoadCredentials(path string) (*Credentials, error) {
 // 呼び出し側の誤用 (例: 0644 渡し) から守るための設計判断。
 func SaveCredentials(path string, c *Credentials) error {
 	if c == nil {
-		return errors.New("credentials が nil です")
+		return errors.New("credentials must not be nil")
 	}
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("ディレクトリ作成に失敗 (%s): %w", dir, err)
+		return fmt.Errorf("create dir (%s): %w", dir, err)
 	}
 	// MkdirAll は既存ディレクトリの mode を変えないため、明示 Chmod で 0700 を強制する。
 	if err := os.Chmod(dir, 0o700); err != nil {
-		return fmt.Errorf("ディレクトリのパーミッション設定に失敗 (%s): %w", dir, err)
+		return fmt.Errorf("chmod dir (%s): %w", dir, err)
 	}
 
 	tmp := fmt.Sprintf("%s.tmp-%d", path, os.Getpid())
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("一時ファイル作成に失敗 (%s): %w", tmp, err)
+		return fmt.Errorf("create temp file (%s): %w", tmp, err)
 	}
 
 	enc := toml.NewEncoder(f)
 	if encErr := enc.Encode(credentialsFile{XAPI: *c}); encErr != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)
-		return fmt.Errorf("credentials.toml のエンコードに失敗: %w", encErr)
+		return fmt.Errorf("encode credentials.toml: %w", encErr)
 	}
 	if closeErr := f.Close(); closeErr != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("一時ファイルのクローズに失敗: %w", closeErr)
+		return fmt.Errorf("close temp file: %w", closeErr)
 	}
 	if renameErr := os.Rename(tmp, path); renameErr != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("credentials.toml のリネームに失敗 (%s → %s): %w", tmp, path, renameErr)
+		return fmt.Errorf("rename credentials.toml (%s -> %s): %w", tmp, path, renameErr)
 	}
 	if chmodErr := os.Chmod(path, 0o600); chmodErr != nil {
-		return fmt.Errorf("credentials.toml のパーミッション設定に失敗 (%s): %w", path, chmodErr)
+		return fmt.Errorf("chmod credentials.toml (%s): %w", path, chmodErr)
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func CheckPermissions(path string) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("%w: %s", ErrCredentialsNotFound, path)
 		}
-		return fmt.Errorf("credentials.toml の状態取得に失敗 (%s): %w", path, err)
+		return fmt.Errorf("stat credentials.toml (%s): %w", path, err)
 	}
 	if runtime.GOOS == "windows" {
 		return nil

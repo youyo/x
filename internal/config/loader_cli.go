@@ -25,12 +25,12 @@ func LoadCLI(path string) (*CLIConfig, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return defaults, nil
 		}
-		return nil, fmt.Errorf("config.toml の状態取得に失敗 (%s): %w", path, err)
+		return nil, fmt.Errorf("stat config.toml (%s): %w", path, err)
 	}
 
 	var decoded CLIConfig
 	if _, err := toml.DecodeFile(path, &decoded); err != nil {
-		return nil, fmt.Errorf("config.toml のデコードに失敗 (%s): %w", path, err)
+		return nil, fmt.Errorf("decode config.toml (%s): %w", path, err)
 	}
 	applyDefaults(&decoded, defaults)
 	return &decoded, nil

@@ -13,7 +13,7 @@ import (
 
 // ErrSecretInConfig は config.toml にシークレット系のキーが含まれていた場合に返される番兵エラー。
 // spec §11「シークレット系のキーが config.toml に書かれている場合はエラー終了する」に対応。
-var ErrSecretInConfig = errors.New("config.toml にシークレットが含まれています (credentials.toml に分離してください)")
+var ErrSecretInConfig = errors.New("config.toml contains secrets (move them to credentials.toml)")
 
 // secretKeys は config.toml に書いてはいけないキー名 (小文字、セクション位置を問わない)。
 // 大文字小文字混在は呼び出し側で ToLower 後に判定する。
@@ -45,12 +45,12 @@ func CheckConfigNoSecrets(path string) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
-		return fmt.Errorf("config.toml の状態取得に失敗 (%s): %w", path, err)
+		return fmt.Errorf("stat config.toml (%s): %w", path, err)
 	}
 
 	var raw map[string]any
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
-		return fmt.Errorf("config.toml のデコードに失敗 (%s): %w", path, err)
+		return fmt.Errorf("decode config.toml (%s): %w", path, err)
 	}
 
 	found := collectSecretKeys(raw)
@@ -58,7 +58,7 @@ func CheckConfigNoSecrets(path string) error {
 		return nil
 	}
 	sort.Strings(found)
-	return fmt.Errorf("%w: 検出されたキー [%s]", ErrSecretInConfig, strings.Join(found, ", "))
+	return fmt.Errorf("%w: detected keys [%s]", ErrSecretInConfig, strings.Join(found, ", "))
 }
 
 // collectSecretKeys は decoded を再帰探索し、secret 系キー / セクション名を見つけたパス
