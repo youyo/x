@@ -212,12 +212,31 @@ type Meta struct {
 // Includes は X API v2 のレスポンス `includes` オブジェクトを表す DTO である。
 //
 // `expansions=author_id` 指定時に `users` 配列が、
-// `expansions=referenced_tweets.id` 指定時に `tweets` 配列が含まれる。
+// `expansions=referenced_tweets.id` 指定時に `tweets` 配列が、
+// `expansions=attachments.media_keys` 指定時に `media` 配列が含まれる (M35)。
 type Includes struct {
 	// Users は expansion で取得された関連ユーザー。
 	Users []User `json:"users,omitempty"`
 	// Tweets は expansion で取得された関連ツイート (referenced_tweets.id 等)。
 	Tweets []Tweet `json:"tweets,omitempty"`
+	// Media は expansion=attachments.media_keys で取得された関連メディア (M35)。
+	Media []Media `json:"media,omitempty"`
+}
+
+// Media は X API v2 の expansions=attachments.media_keys + media.fields で
+// 返される media オブジェクトを表す DTO である (M35)。
+//
+// 必須 (media_key) は X API がデフォルト返却。それ以外 (Type / URL / PreviewImageURL ...)
+// は media.fields で明示的に要求した場合のみ返却される。
+type Media struct {
+	MediaKey        string `json:"media_key"`
+	Type            string `json:"type,omitempty"` // photo / video / animated_gif
+	URL             string `json:"url,omitempty"`
+	PreviewImageURL string `json:"preview_image_url,omitempty"`
+	DurationMs      int    `json:"duration_ms,omitempty"`
+	Width           int    `json:"width,omitempty"`
+	Height          int    `json:"height,omitempty"`
+	AltText         string `json:"alt_text,omitempty"`
 }
 
 // ErrorResponse は X API v2 がエラー時に返す JSON 本体を表す DTO である。
