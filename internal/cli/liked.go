@@ -23,6 +23,10 @@ import (
 // 仕様 (spec §6) に明示は無いため、CLI の独自判断として plans/x-m10-cli-liked-basic.md D-5 で確定。
 const likedHumanTextMaxRunes = 80
 
+// likedAPIMinMaxResults は X API が `/2/users/:id/liked_tweets` の max_results に課す下限値である。
+// CLI 側で n<5 を指定された場合は 5 を投げ、レスポンスを `[:n]` で絞る (M29 D-2)。
+const likedAPIMinMaxResults = 5
+
 // loadLikedDefaults は `x liked list` の各フラグデフォルト値を解決して返す (M12)。
 //
 // 解決順 (spec §11 優先順位、env > config.toml > 組み込みデフォルト の文脈で
@@ -175,6 +179,12 @@ func newLikedListCmd() *cobra.Command {
 			if maxResults < 1 || maxResults > 100 {
 				return fmt.Errorf("%w: --max-results must be in 1..100, got %d", ErrInvalidArgument, maxResults)
 			}
+			// M29 D-11: --all と --max-results 1..4 の組み合わせは UX 混乱を避けるため拒否。
+			// X API は per-page 5 件以上を要求するため、補正すると「1 件しか要らない」意図と
+			// 実挙動 (5×N) が乖離する。--all 無しの単一ページ補正のみサポート (D-2)。
+			if all && maxResults < likedAPIMinMaxResults {
+				return fmt.Errorf("%w: --max-results 1..4 cannot be combined with --all (X API per-page minimum is 5)", ErrInvalidArgument)
+			}
 			outMode, err := decideOutputMode(noJSON, ndjson)
 			if err != nil {
 				return err
@@ -234,8 +244,16 @@ func newLikedListCmd() *cobra.Command {
 			}
 
 			// 6. オプション組み立て。
+			// M29 D-2: --max-results 1..4 は X API 下限 (5) を投げて応答を slice する。
+			// --all 時はそもそも上で拒否済 (D-11) なので、ここに来るのは --all=false のみ。
+			effectiveMaxResults := maxResults
+			truncateTo := 0
+			if maxResults < likedAPIMinMaxResults {
+				effectiveMaxResults = likedAPIMinMaxResults
+				truncateTo = maxResults
+			}
 			opts := []xapi.LikedTweetsOption{
-				xapi.WithMaxResults(maxResults),
+				xapi.WithMaxResults(effectiveMaxResults),
 			}
 			if !startT.IsZero() {
 				opts = append(opts, xapi.WithStartTime(startT))
@@ -270,6 +288,11 @@ func newLikedListCmd() *cobra.Command {
 				resp, err := client.ListLikedTweets(ctx, targetUserID, opts...)
 				if err != nil {
 					return err
+				}
+				// M29 D-2: 下限補正があれば応答を slice する。
+				if truncateTo > 0 && resp != nil && len(resp.Data) > truncateTo {
+					resp.Data = resp.Data[:truncateTo]
+					resp.Meta.ResultCount = truncateTo
 				}
 				return writeLikedSinglePage(cmd, resp, outMode)
 			}
@@ -510,8 +533,15 @@ func writeLikedHuman(cmd *cobra.Command, resp *xapi.LikedTweetsResponse) error {
 
 // formatLikedHumanLine は 1 ツイートを human 1 行に整形する。
 // 改行 / タブを半角スペースに置換し、本文を truncateRunes で抑制する。
+//
+// M29 D-3: note_tweet.text が非空の場合は truncated text より優先する
+// (ロングツイートの真の本文を表示するため)。
 func formatLikedHumanLine(tw xapi.Tweet) string {
-	text := sanitizeLikedText(tw.Text)
+	text := tw.Text
+	if tw.NoteTweet != nil && tw.NoteTweet.Text != "" {
+		text = tw.NoteTweet.Text
+	}
+	text = sanitizeLikedText(text)
 	text = truncateRunes(text, likedHumanTextMaxRunes)
 	return fmt.Sprintf("id=%s\tauthor=%s\tcreated=%s\ttext=%s",
 		tw.ID, tw.AuthorID, tw.CreatedAt, text)

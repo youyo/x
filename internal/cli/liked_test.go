@@ -1198,3 +1198,189 @@ func TestLikedListHelp_ShowsExtFlags(t *testing.T) {
 		}
 	}
 }
+
+// -- M29: max-results 下限補正 + note_tweet 優先表示 --------------------------
+
+// TestLikedList_MaxResults_BelowFive_SinglePage は --max-results 1 のとき
+// X API には max_results=5 を投げ、レスポンスを 1 件に絞ることを検証する (D-2)。
+func TestLikedList_MaxResults_BelowFive_SinglePage(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	body := `{"data":[
+		{"id":"1","text":"t1","author_id":"42"},
+		{"id":"2","text":"t2","author_id":"42"},
+		{"id":"3","text":"t3","author_id":"42"},
+		{"id":"4","text":"t4","author_id":"42"},
+		{"id":"5","text":"t5","author_id":"42"}
+	],"meta":{"result_count":5}}`
+
+	srv, state := newLikedTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	})
+	stubLikedClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"liked", "list", "--user-id", "12345", "--max-results", "1"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	_, qs := state.snapshot()
+	if len(qs) == 0 {
+		t.Fatalf("no requests recorded")
+	}
+	if !strings.Contains(qs[0], "max_results=5") {
+		t.Errorf("query should request max_results=5 (CLI floor correction), got: %q", qs[0])
+	}
+
+	var got xapi.LikedTweetsResponse
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v out=%q", err, buf.String())
+	}
+	if len(got.Data) != 1 || got.Data[0].ID != "1" {
+		t.Errorf("Data = %+v, want only first tweet", got.Data)
+	}
+	if got.Meta.ResultCount != 1 {
+		t.Errorf("Meta.ResultCount = %d, want 1", got.Meta.ResultCount)
+	}
+}
+
+// TestLikedList_MaxResults_BelowFive_NoJSON は --max-results 2 --no-json で
+// 2 行のみ出力されることを検証する。
+func TestLikedList_MaxResults_BelowFive_NoJSON(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	body := `{"data":[
+		{"id":"1","text":"t1","author_id":"42"},
+		{"id":"2","text":"t2","author_id":"42"},
+		{"id":"3","text":"t3","author_id":"42"},
+		{"id":"4","text":"t4","author_id":"42"},
+		{"id":"5","text":"t5","author_id":"42"}
+	],"meta":{"result_count":5}}`
+
+	srv, _ := newLikedTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	})
+	stubLikedClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"liked", "list", "--user-id", "12345", "--max-results", "2", "--no-json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	trimmed := strings.TrimRight(buf.String(), "\n")
+	lines := strings.Split(trimmed, "\n")
+	if len(lines) != 2 {
+		t.Errorf("expected 2 lines, got %d: %q", len(lines), buf.String())
+	}
+}
+
+// TestLikedList_MaxResults_BelowFive_All_RejectsArgument は --all + --max-results 1..4 で
+// ErrInvalidArgument を返すことを検証する (D-11)。
+func TestLikedList_MaxResults_BelowFive_All_RejectsArgument(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	srv, _ := newLikedTestServer(t, nil)
+	stubLikedClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"liked", "list", "--user-id", "12345", "--all", "--max-results", "1"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected ErrInvalidArgument, got nil")
+	}
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("errors.Is(err, ErrInvalidArgument) = false (err=%v)", err)
+	}
+}
+
+// TestLikedList_NoteTweet_HumanOverride は --no-json 出力で note_tweet.text が
+// truncated text より優先表示されることを検証する (D-3)。
+func TestLikedList_NoteTweet_HumanOverride(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	body := `{"data":[
+		{"id":"100","text":"truncated…","author_id":"42","created_at":"2026-05-12T01:23:45.000Z","note_tweet":{"text":"FULL BODY"}},
+		{"id":"200","text":"short","author_id":"42","created_at":"2026-05-12T01:23:46.000Z"}
+	],"meta":{"result_count":2}}`
+
+	srv, _ := newLikedTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	})
+	stubLikedClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"liked", "list", "--user-id", "12345", "--no-json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "id=100") || !strings.Contains(out, "text=FULL BODY") {
+		t.Errorf("expected id=100 with text=FULL BODY in output: %q", out)
+	}
+	if !strings.Contains(out, "id=200") || !strings.Contains(out, "text=short") {
+		t.Errorf("expected id=200 with text=short in output: %q", out)
+	}
+	if strings.Contains(out, "text=truncated") {
+		t.Errorf("did not expect truncated text in output: %q", out)
+	}
+}
+
+// TestLikedList_NoteTweet_JSON_Unchanged は JSON 出力で note_tweet と text の
+// 両方が後方互換的に含まれることを検証する (D-3 後方互換)。
+func TestLikedList_NoteTweet_JSON_Unchanged(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	body := `{"data":[
+		{"id":"100","text":"truncated…","author_id":"42","note_tweet":{"text":"FULL BODY"}}
+	],"meta":{"result_count":1}}`
+
+	srv, _ := newLikedTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	})
+	stubLikedClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"liked", "list", "--user-id", "12345"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got xapi.LikedTweetsResponse
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v out=%q", err, buf.String())
+	}
+	if len(got.Data) != 1 {
+		t.Fatalf("Data len = %d, want 1", len(got.Data))
+	}
+	tw := got.Data[0]
+	if tw.Text != "truncated…" {
+		t.Errorf("Text = %q, want truncated…", tw.Text)
+	}
+	if tw.NoteTweet == nil || tw.NoteTweet.Text != "FULL BODY" {
+		t.Errorf("NoteTweet = %+v", tw.NoteTweet)
+	}
+}

@@ -53,9 +53,11 @@ func DefaultCLIConfig() *CLIConfig {
 			LogLevel: "info",
 		},
 		Liked: LikedSection{
-			DefaultMaxResults:  100,
-			DefaultMaxPages:    50,
-			DefaultTweetFields: "id,text,author_id,created_at,entities,public_metrics",
+			DefaultMaxResults: 100,
+			DefaultMaxPages:   50,
+			// M29: note_tweet (long-form tweet body) を既定で取得し、--no-json 出力時に
+			// truncated text より優先表示する (D-3)。
+			DefaultTweetFields: "id,text,author_id,created_at,entities,public_metrics,note_tweet",
 			DefaultExpansions:  "author_id",
 			DefaultUserFields:  "username,name",
 		},

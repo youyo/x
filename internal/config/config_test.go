@@ -19,7 +19,7 @@ func TestDefaultCLIConfig(t *testing.T) {
 		Liked: config.LikedSection{
 			DefaultMaxResults:  100,
 			DefaultMaxPages:    50,
-			DefaultTweetFields: "id,text,author_id,created_at,entities,public_metrics",
+			DefaultTweetFields: "id,text,author_id,created_at,entities,public_metrics,note_tweet",
 			DefaultExpansions:  "author_id",
 			DefaultUserFields:  "username,name",
 		},
