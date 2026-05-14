@@ -235,9 +235,12 @@ func TestSpaceByIDs_EmptyIDs_Rejects(t *testing.T) {
 	cmd.SetArgs([]string{"space", "by-ids"})
 	err := cmd.Execute()
 	if err == nil {
-		t.Fatal("want error (required flag missing)")
+		t.Fatal("want error")
 	}
-	// cobra の required flag エラーまたは ErrInvalidArgument
+	// exit 2 (ErrInvalidArgument) であることを pin (M34 D-5、cobra MarkFlagRequired を回避)
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("err = %v, want ErrInvalidArgument (exit 2)", err)
+	}
 }
 
 // =============================================================================
@@ -378,8 +381,13 @@ func TestSpaceByCreator_EmptyIDs_Rejects(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"space", "by-creator"})
-	if err := cmd.Execute(); err == nil {
+	err := cmd.Execute()
+	if err == nil {
 		t.Fatal("want error")
+	}
+	// exit 2 (ErrInvalidArgument) であることを pin (M34 D-5)
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("err = %v, want ErrInvalidArgument (exit 2)", err)
 	}
 }
 

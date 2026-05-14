@@ -204,8 +204,9 @@ func newSpaceByIDsCmd() *cobra.Command {
 			return writeSpacesHumanOrJSON(cmd, resp, noJSON)
 		},
 	}
+	// NOTE: cobra の MarkFlagRequired は exit code 1 (generic) を返してしまうため使わない。
+	// RunE 内で splitCSV(ids) == 0 を ErrInvalidArgument で wrap して exit 2 を保証する (M34 D-5)。
 	cmd.Flags().StringVar(&ids, "ids", "", "comma-separated Space IDs (1..100, required)")
-	_ = cmd.MarkFlagRequired("ids")
 	cmd.Flags().StringVar(&spaceFields, "space-fields", spaceDefaultSpaceFields, "comma-separated space.fields")
 	cmd.Flags().StringVar(&expansions, "expansions", spaceDefaultExpansions, "comma-separated expansions")
 	cmd.Flags().StringVar(&userFields, "user-fields", spaceDefaultUserFields, "comma-separated user.fields")
@@ -334,8 +335,8 @@ func newSpaceByCreatorCmd() *cobra.Command {
 			return writeSpacesHumanOrJSON(cmd, resp, noJSON)
 		},
 	}
+	// NOTE: MarkFlagRequired は exit code 1 を返すため使わず、RunE で ErrInvalidArgument wrap する (M34 D-5)。
 	cmd.Flags().StringVar(&ids, "ids", "", "comma-separated user IDs (1..100, required)")
-	_ = cmd.MarkFlagRequired("ids")
 	cmd.Flags().StringVar(&spaceFields, "space-fields", spaceDefaultSpaceFields, "comma-separated space.fields")
 	cmd.Flags().StringVar(&expansions, "expansions", spaceDefaultExpansions, "comma-separated expansions")
 	cmd.Flags().StringVar(&userFields, "user-fields", spaceDefaultUserFields, "comma-separated user.fields")
