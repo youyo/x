@@ -72,6 +72,29 @@ type Tweet struct {
 	// 関連ツイート本体を取得するには `expansions=referenced_tweets.id` を併用する
 	// (Includes.Tweets に詰められる)。
 	ReferencedTweets []ReferencedTweet `json:"referenced_tweets,omitempty"`
+	// NoteTweet は 280 字超のロングツイート (Note Tweet) の本文・エンティティを保持する。
+	// `tweet.fields=note_tweet` が必要。ロングツイート対象ツイートのみで非 nil。
+	// note_tweet が返らないツイート (旧 280 字以内) は nil のまま (omitempty で省略)。
+	// CLI の human 出力 (M29) では NoteTweet.Text が非空ならそれを Text より優先表示する。
+	NoteTweet *NoteTweet `json:"note_tweet,omitempty"`
+	// ConversationID は会話 (スレッド) のルートツイート ID を保持する。
+	// `tweet.fields=conversation_id` が必要。ツイート自身がルートなら自分自身の ID と一致する。
+	// 未指定時は空文字列 (omitempty で省略)。
+	ConversationID string `json:"conversation_id,omitempty"`
+}
+
+// NoteTweet は X API v2 のロングツイート (Note Tweet, 280 字超) を表す DTO である。
+//
+// `tweet.fields=note_tweet` で取得され、ロングツイート対象のみで返却される。
+// Text は完全な本文 (truncate なし)。Entities は本文内の URL / Hashtag / Mention 抽出で、
+// 既存 TweetEntities 型を流用 (M29 D-6)。X API は annotations を返さないことが多いが、
+// `TweetEntities.Annotations` は `omitempty` で nil のまま省略される。
+type NoteTweet struct {
+	// Text はロングツイートの本文 (完全な文字列、truncate なし)。
+	Text string `json:"text"`
+	// Entities は本文内のエンティティ抽出結果 (URLs / Hashtags / Mentions)。
+	// 未指定時は nil。
+	Entities *TweetEntities `json:"entities,omitempty"`
 }
 
 // TweetPublicMetrics はツイートの公開メトリクスを表す DTO である。

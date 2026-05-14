@@ -255,6 +255,96 @@ func TestIncludes_Unmarshal_WithTweets(t *testing.T) {
 	}
 }
 
+// TestTweet_Unmarshal_WithNoteTweet は M29 で追加した note_tweet フィールド
+// (text のみ) を Tweet.NoteTweet にデコードできることを確認する。
+func TestTweet_Unmarshal_WithNoteTweet(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"id":"1",
+		"text":"truncated…",
+		"note_tweet":{"text":"This is the full long-form note tweet body."}
+	}`)
+	var tw Tweet
+	if err := json.Unmarshal(raw, &tw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if tw.NoteTweet == nil {
+		t.Fatal("NoteTweet = nil, want non-nil")
+	}
+	if tw.NoteTweet.Text != "This is the full long-form note tweet body." {
+		t.Errorf("NoteTweet.Text = %q", tw.NoteTweet.Text)
+	}
+	if tw.NoteTweet.Entities != nil {
+		t.Errorf("NoteTweet.Entities = %+v, want nil (omitted)", tw.NoteTweet.Entities)
+	}
+}
+
+// TestTweet_Unmarshal_WithNoteTweetEntities は note_tweet.entities が
+// 既存 TweetEntities 型 (D-6) として読めることを確認する。
+func TestTweet_Unmarshal_WithNoteTweetEntities(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"id":"1",
+		"text":"truncated…",
+		"note_tweet":{
+			"text":"Long body with #tag and https://t.co/xyz",
+			"entities":{
+				"urls":[{"start":24,"end":40,"url":"https://t.co/xyz","expanded_url":"https://example.com"}],
+				"hashtags":[{"start":15,"end":19,"tag":"tag"}],
+				"mentions":[{"start":0,"end":0,"username":"bob"}]
+			}
+		}
+	}`)
+	var tw Tweet
+	if err := json.Unmarshal(raw, &tw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if tw.NoteTweet == nil || tw.NoteTweet.Entities == nil {
+		t.Fatal("NoteTweet.Entities = nil")
+	}
+	if len(tw.NoteTweet.Entities.URLs) != 1 || tw.NoteTweet.Entities.URLs[0].ExpandedURL != "https://example.com" {
+		t.Errorf("NoteTweet.Entities.URLs = %+v", tw.NoteTweet.Entities.URLs)
+	}
+	if len(tw.NoteTweet.Entities.Hashtags) != 1 || tw.NoteTweet.Entities.Hashtags[0].Tag != "tag" {
+		t.Errorf("NoteTweet.Entities.Hashtags = %+v", tw.NoteTweet.Entities.Hashtags)
+	}
+	if len(tw.NoteTweet.Entities.Mentions) != 1 || tw.NoteTweet.Entities.Mentions[0].Username != "bob" {
+		t.Errorf("NoteTweet.Entities.Mentions = %+v", tw.NoteTweet.Entities.Mentions)
+	}
+}
+
+// TestTweet_Unmarshal_WithoutNoteTweet は note_tweet が無いレスポンスで
+// Tweet.NoteTweet が nil のままになることを確認する (omitempty)。
+func TestTweet_Unmarshal_WithoutNoteTweet(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"id":"1","text":"hello"}`)
+	var tw Tweet
+	if err := json.Unmarshal(raw, &tw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if tw.NoteTweet != nil {
+		t.Errorf("NoteTweet = %+v, want nil", tw.NoteTweet)
+	}
+}
+
+// TestTweet_Unmarshal_WithConversationID は conversation_id が
+// Tweet.ConversationID に読み込まれることを確認する。
+func TestTweet_Unmarshal_WithConversationID(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"id":"100","text":"reply","conversation_id":"42"}`)
+	var tw Tweet
+	if err := json.Unmarshal(raw, &tw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if tw.ConversationID != "42" {
+		t.Errorf("ConversationID = %q, want %q", tw.ConversationID, "42")
+	}
+}
+
 // TestErrorResponse_Unmarshal は X API v2 のエラーレスポンス JSON が
 // ErrorResponse 構造体にデコードされることを確認する。
 func TestErrorResponse_Unmarshal(t *testing.T) {
