@@ -143,7 +143,7 @@ func newTimelineTweetsCmd() *cobra.Command {
 			"Exit codes: 0 success, 1 generic, 2 argument error, 3 auth, 4 permission, 5 not found.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// --user-id と位置引数 <ID> はどちらか一方 (位置引数優先、liked と異なり明示)。
+			// 位置引数 <ID> 指定時は --user-id を上書きする (両指定可だが位置引数が勝つ)。
 			explicitID := userID
 			if len(args) == 1 {
 				explicitID = strings.TrimSpace(args[0])
@@ -174,6 +174,7 @@ func newTimelineMentionsCmd() *cobra.Command {
 			"Exit codes: 0 success, 1 generic, 2 argument error, 3 auth, 4 permission, 5 not found.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// 位置引数 <ID> 指定時は --user-id を上書きする (両指定可だが位置引数が勝つ)。
 			explicitID := userID
 			if len(args) == 1 {
 				explicitID = strings.TrimSpace(args[0])
