@@ -159,6 +159,25 @@ func TestRootHelpShowsTrends(t *testing.T) {
 	}
 }
 
+// TestRootHelpShowsDM は `x --help` に dm サブコマンドが表示されることを検証する (M35)。
+func TestRootHelpShowsDM(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "dm") {
+		t.Errorf("help output missing %q, got: %s", "dm", out)
+	}
+}
+
 // TestRootHelpShowsCompletion は `x --help` に Cobra 自動追加の completion サブコマンドが
 // 表示されることを検証する。
 func TestRootHelpShowsCompletion(t *testing.T) {

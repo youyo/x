@@ -54,6 +54,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newListCmd())
 	root.AddCommand(newSpaceCmd())
 	root.AddCommand(newTrendsCmd())
+	root.AddCommand(newDMCmd())
 	root.AddCommand(newConfigureCmd())
 	root.AddCommand(newMcpCmd())
 	// NOTE: completion サブコマンドは Cobra が自動追加する (HasAvailableSubCommands が真のため)。
