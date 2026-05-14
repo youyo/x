@@ -22,7 +22,8 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 | `v0.3.0` | `examples/lambroll/` AWS Lambda Function URL デプロイサンプル + Claude Code Routines プロンプト雛形 (`docs/routine-prompt.md`) + X API v2 リファレンス (`docs/x-api.md`) |
 | `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (ロングツイート) 既定取得 + `liked list --max-results 1..4` 自動補正 |
 | `v0.5.0` | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30、**Basic tier 以上必須**) + `x timeline tweets` / `mentions` / `home` (M31) |
-| `v0.6.0` (本リリース、draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — Users Extended 9 endpoint (M32) + `x list get` / `tweets` / `members` / `owned` / `followed` / `memberships` / `pinned` — Lists 7 endpoint (M33) |
+| `v0.6.0` (draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — Users Extended 9 endpoint (M32) + `x list get` / `tweets` / `members` / `owned` / `followed` / `memberships` / `pinned` — Lists 7 endpoint (M33) |
+| `v0.7.0` (本リリース、draft) | `x space get` / `by-ids` / `search` / `by-creator` / `tweets` — Spaces 5 endpoint (M34、**アクティブな Space のみ**) + `x trends get <woeid>` / `personal` — Trends 2 endpoint (M34) |
 
 詳細仕様は [`docs/specs/x-spec.md`](docs/specs/x-spec.md) を参照。
 
@@ -52,6 +53,11 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 - **`x list members <ID|URL>`** — List メンバー (ユーザー) を `GET /2/lists/:id/members` で取得 (v0.6.0)
 - **`x list owned [<ID|@username|URL>]` / `x list followed` / `x list memberships`** — ユーザーが所有 / フォロー / 参加している List 一覧 (省略時は self、`@username`/URL は `GetUserByUsername` で先に ID 解決) (v0.6.0)
 - **`x list pinned`** — 自アカのピン留め List。X API 仕様で self only かつページネーション非対応のため `--user-id` / `--all` は意図的に未登録 (v0.6.0)
+- **`x space get <ID|URL>` / `x space by-ids --ids ...` / `x space by-creator --ids ...`** — アクティブな Space (live / scheduled) を ID / `https://x.com/i/spaces/<ID>` URL / 最大 100 件のバッチで取得。終了済み Space は X API 仕様で取得不可 (v0.7.0)
+- **`x space search <query>`** — アクティブな Space をキーワード検索 (`--state live/scheduled/all`、`--max-results 1..100`)。X API はページネーション非対応のため `--all` は意図的に未登録 (v0.7.0)
+- **`x space tweets <ID|URL>`** — Space 内の Tweet を取得 (`--max-results 1..100`、`--all` で `pagination_token` 自動辿り、NDJSON ストリーミング) (v0.7.0)
+- **`x trends get <woeid>`** — WOEID 指定トレンド (Yahoo Where On Earth ID)。代表値: `1118370` (東京) / `23424856` (日本) / `1` (全世界)。X API パラメータ名は `max_trends` (1..50、`max_results` ではない) (v0.7.0)
+- **`x trends personal`** — 認証ユーザーのパーソナライズトレンド。X API が自動解決するため `--user-id` は未登録。X API パラメータ名は `personalized_trend.fields` (`trend.fields` ではない) (v0.7.0)
 - **`x configure`** — 対話形式で XDG 準拠の設定 / 認証情報ファイルを生成
 - **`x mcp`** — Streamable HTTP MCP サーバーを起動 (Claude Code Routines / MCP クライアント接続用)
   - 3 種類の認証モード: `none` (ローカル開発専用) / `apikey` (Bearer token) / `idproxy` (OIDC + cookie session)

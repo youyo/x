@@ -331,6 +331,37 @@ x list pinned               ※ M33、GET /2/users/:id/pinned_lists (self only)
   ※ X API はページネーション非対応のため --all / --pagination-token / --max-results は登録しない
   --list-fields / --expansions / --user-fields / --no-json
 
+x space get <ID|URL>        ※ M34、GET /2/spaces/:id (アクティブな Space のみ取得可)
+  ※ 位置引数は英数字 Space ID (例: 1OdJrXWaPVPGX) または https://(x|twitter).com/i/spaces/<ID> URL を判別
+  --space-fields / --expansions / --user-fields / --topic-fields / --no-json
+
+x space by-ids --ids <csv>  ※ M34、GET /2/spaces?ids= (1..100、バッチ取得)
+  ※ --ids は MarkFlagRequired 必須、位置引数なし (cobra.NoArgs)
+  --space-fields / --expansions / --user-fields / --topic-fields / --no-json
+
+x space search <query>      ※ M34、GET /2/spaces/search
+  ※ X API はページネーション非対応 (docs.x.com で検証済) のため --all を提供しない
+  --state live|scheduled|all / --max-results 1..100
+  --space-fields / --expansions / --user-fields / --topic-fields / --no-json
+
+x space by-creator --ids <csv>   ※ M34、GET /2/spaces/by/creator_ids?user_ids= (1..100)
+  ※ --ids は MarkFlagRequired 必須、位置引数なし
+  --space-fields / --expansions / --user-fields / --topic-fields / --no-json
+
+x space tweets <ID|URL>     ※ M34、GET /2/spaces/:id/tweets
+  --max-results 1..100 / --pagination-token / --all + --max-pages
+  --no-json / --ndjson (排他) / --tweet-fields / --user-fields / --expansions / --media-fields
+
+x trends get <woeid>        ※ M34、GET /2/trends/by/woeid/:woeid
+  ※ X API パラメータ名は max_trends (≠ max_results)、上限 50
+  ※ WOEID 例: 1118370 (東京) / 23424856 (日本) / 1 (全世界)
+  --max-trends 1..50 / --trend-fields trend_name,tweet_count / --no-json
+
+x trends personal           ※ M34、GET /2/users/personalized_trends (認証ユーザー固定)
+  ※ X API 認証ヘッダから自動解決のため --user-id を公開しない
+  ※ X API パラメータ名は personalized_trend.fields (≠ trend.fields)
+  --personalized-trend-fields trend_name,category,post_count,trending_since / --no-json
+
 x mcp
   --host <addr>             (default: 127.0.0.1, Lambda は 0.0.0.0)
   --port <int>              (default: 8080)

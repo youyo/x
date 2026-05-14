@@ -4,6 +4,46 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-15 (draft)
+
+X API v2 の Spaces 系 5 エンドポイントと Trends 系 2 エンドポイントを `x space` / `x trends` サブコマンドとして CLI に追加する (M34)。Spaces はアクティブな Space (live/scheduled) のみ取得可能。SearchSpaces は X API がページネーション非対応のため `--all` を提供しない。Trends は 2 endpoint でパラメータ名 (`max_trends` / `personalized_trend.fields`) と返却フィールドが異なるため、xapi 層では Option 型を分離した。
+
+### Added
+
+#### `x space` サブコマンド (M34)
+- `x space get <ID|URL>` — 単一 Space 取得 (`GET /2/spaces/:id`)。位置引数は英数字 ID または `https://(x|twitter).com/i/spaces/<ID>` URL を判別 (`extractSpaceID`)
+- `x space by-ids --ids <csv>` — 複数 Space バッチ取得 (`GET /2/spaces?ids=`、1..100)。`--ids` は `MarkFlagRequired` で必須化、位置引数なし
+- `x space search <query>` — キーワード検索 (`GET /2/spaces/search`)。`--state live/scheduled/all`、`--max-results 1..100`。X API はページネーション非対応のため `--all` 非提供 (M34 D-2)
+- `x space by-creator --ids <csv>` — 作成者 ID 指定取得 (`GET /2/spaces/by/creator_ids`、1..100)
+- `x space tweets <ID|URL>` — Space 内 Tweet (`GET /2/spaces/:id/tweets`)。`--max-results 1..100`、`--all` で `pagination_token` 自動辿り、`--no-json` / `--ndjson` 対応
+- 注: アクティブな Space (live / scheduled) のみ取得可能。終了済み Space は X API 仕様で取得不可
+- 除外: `GET /2/spaces/:id/buyers` は OAuth 2.0 PKCE 専用のため対象外
+
+#### `x trends` サブコマンド (M34)
+- `x trends get <woeid>` — WOEID 指定トレンド (`GET /2/trends/by/woeid/:woeid`)。`--max-trends 1..50` (X API パラメータ名は `max_trends`、`max_results` ではない)、`--trend-fields trend_name,tweet_count`
+- `x trends personal` — パーソナライズトレンド (`GET /2/users/personalized_trends`)。認証ユーザー固定のため `--user-id` 非公開 (M34 D-7)。`--personalized-trend-fields` (X API パラメータ名は `personalized_trend.fields`、`trend.fields` ではない)
+- 代表的な WOEID: 1118370 (東京) / 23424856 (日本) / 1 (全世界)
+
+#### `xapi` パッケージ拡張 (M34)
+- 5 新規 Spaces メソッド: `Client.GetSpace` / `GetSpaces` / `SearchSpaces` / `GetSpacesByCreatorIDs` / `GetSpaceTweets`
+- 1 新規 Spaces iterator: `EachSpaceTweetsPage`
+- 2 新規 Trends メソッド: `Client.GetTrends` / `GetPersonalizedTrends`
+- 3 新規 Option 型 (Spaces 用途別分離、M34 D-1):
+  - `SpaceLookupOption` — `WithSpaceLookupSpaceFields` / `WithSpaceLookupExpansions` / `WithSpaceLookupUserFields` / `WithSpaceLookupTopicFields` (GetSpace / GetSpaces / GetSpacesByCreatorIDs 共通)
+  - `SpaceSearchOption` — `WithSpaceSearchMaxResults` / `WithSpaceSearchState` / 各種 fields (SearchSpaces 専用、将来の next_token サポートに備え独立型として確保)
+  - `SpaceTweetsOption` — `WithSpaceTweetsMaxResults` / `WithSpaceTweetsPaginationToken` / 各種 fields + `WithSpaceTweetsMaxPages` (paged)
+- 2 新規 Option 型 (Trends 用途別分離、M34 D-4):
+  - `TrendWoeidOption` — `WithTrendWoeidMaxTrends` (1..50) / `WithTrendWoeidTrendFields`
+  - `TrendPersonalOption` — `WithTrendPersonalFields`
+- 新規 DTO: `Space` / `SpaceResponse` (単一) / `SpacesResponse` (配列) / `SpaceTweetsResponse` (Tweet 配列、space tweets 専用) / `Trend` (union DTO、両 endpoint のフィールド集約) / `TrendsResponse`
+- SearchSpaces は X API が next_token を返さないことを docs.x.com で検証済 (2026-05-15、M34 D-2)
+- Trends 2 endpoint のパラメータ名・上限・fields 値の差分を Option 型分離で吸収 (M34 D-4 / D-18 / D-19)
+
+### Compatibility
+
+- v0.6.0 以前の CLI / MCP 機能は完全後方互換
+- 設定ファイル `config.toml` への変更なし
+
 ## [0.6.0] - 2026-05-14 (draft)
 
 X API v2 の Users Extended エンドポイント群 (lookup / search / graph / blocking / muting) を `x user` サブコマンドとして CLI に追加する (M32)。9 endpoint をカバーし、`blocking` / `muting` は X API 仕様で self only のため、CLI 側で `--user-id` フラグ自体を公開しない設計とした。続いて Lists エンドポイント群 (lookup / tweets / members / owned / followed / memberships / pinned) を `x list` サブコマンドとして追加した (M33)。`pinned` は X API 仕様で self only のため `--user-id` フラグを公開しない (M32 D-5 と同パターン)。

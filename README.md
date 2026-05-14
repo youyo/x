@@ -22,7 +22,8 @@ The design principle is **"CLI is the core, MCP is a thin wrapper"**. From `v0.3
 | `v0.3.0` | `examples/lambroll/` AWS Lambda Function URL deployment sample + Claude Code Routines prompt template (`docs/routine-prompt.md`) + X API v2 reference (`docs/x-api.md`) |
 | `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (long-form) default fetch + `--max-results 1..4` auto-correction for `liked list` |
 | `v0.5.0` | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30, **Basic tier required**) + `x timeline tweets` / `mentions` / `home` (M31) |
-| `v0.6.0` (this release, draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — 9 Users Extended endpoints (M32) + `x list get` / `tweets` / `members` / `owned` / `followed` / `memberships` / `pinned` — 7 Lists endpoints (M33) |
+| `v0.6.0` (draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — 9 Users Extended endpoints (M32) + `x list get` / `tweets` / `members` / `owned` / `followed` / `memberships` / `pinned` — 7 Lists endpoints (M33) |
+| `v0.7.0` (this release, draft) | `x space get` / `by-ids` / `search` / `by-creator` / `tweets` — 5 Spaces endpoints (M34, **active Spaces only**) + `x trends get <woeid>` / `personal` — 2 Trends endpoints (M34) |
 
 See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specification.
 
@@ -52,6 +53,11 @@ See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specific
 - **`x list members <ID|URL>`** — Fetch a List's members (users) via `GET /2/lists/:id/members` (v0.6.0)
 - **`x list owned [<ID|@username|URL>]` / `x list followed` / `x list memberships`** — Fetch Lists owned/followed/joined by a user (defaults to self; `@username`/URL positional args are resolved via `GetUserByUsername` first) (v0.6.0)
 - **`x list pinned`** — Fetch the authenticated user's pinned Lists. X API spec restricts this to self and does NOT support pagination; `--user-id` / `--all` are intentionally not exposed (v0.6.0)
+- **`x space get <ID|URL>` / `x space by-ids --ids ...` / `x space by-creator --ids ...`** — Look up active Spaces (live / scheduled) by ID, X URL (`https://x.com/i/spaces/<ID>`), or batch of up to 100 IDs. Ended Spaces are not retrievable (X API spec) (v0.7.0)
+- **`x space search <query>`** — Search active Spaces (`--state live/scheduled/all`, `--max-results 1..100`). X API does NOT paginate this endpoint, so `--all` is intentionally not exposed (v0.7.0)
+- **`x space tweets <ID|URL>`** — Fetch tweets associated with a Space (`--max-results 1..100`, `--all` for `pagination_token` traversal, NDJSON streaming) (v0.7.0)
+- **`x trends get <woeid>`** — Fetch trends by WOEID (Yahoo Where On Earth ID). Common values: `1118370` (Tokyo) / `23424856` (Japan) / `1` (Worldwide). X API parameter is `max_trends` (1..50, NOT `max_results`) (v0.7.0)
+- **`x trends personal`** — Fetch personalized trends for the authenticated user. X API auto-resolves the user; `--user-id` is intentionally not exposed. Uses `personalized_trend.fields` (NOT `trend.fields`) (v0.7.0)
 - **`x configure`** — Interactive setup of XDG-compliant config + credentials files
 - **`x mcp`** — Start a Streamable HTTP MCP server (Claude Code Routines / MCP client connectivity)
   - Three auth modes: `none` (local dev only), `apikey` (Bearer token), `idproxy` (OIDC + cookie session)

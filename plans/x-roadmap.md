@@ -33,7 +33,7 @@ M28 までの全 28 マイルストーンが完了 (v0.3.0 リリース準備完
 3. **M31**: User Timelines (v0.5.0) ✅ 完了
 4. **M32**: Users Extended (v0.6.0) ✅ 完了
 5. **M33**: Lists (v0.6.0) ✅ 完了
-6. **M34**: Spaces + Trends (v0.7.0)
+6. **M34**: Spaces + Trends (v0.7.0) ✅ 完了
 7. **M35**: DM Read (v0.7.0、Pro 推奨)
 8. **M36**: MCP v2 Tools (v0.8.0、CLI M29-M35 全完了後)
 
@@ -340,12 +340,15 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - [x] T4 (検証 + Docs): test/lint/vet 全 pass / `docs/x-api.md` §1.6 + Rate Limit 表 / spec §6 / README 英日 / CHANGELOG `[0.6.0]` 拡張
 - 📄 詳細: [plans/x-m33-lists.md](./x-m33-lists.md)
 
-#### M34: Spaces + Trends ⏳ 未着手
-- [ ] T1: `internal/xapi/spaces.go` 新規 + `internal/xapi/trends.go` 新規
-- [ ] T2: `internal/cli/space.go` 新規 + `internal/cli/trends.go` 新規
-- [ ] T3: `internal/cli/root.go` — AddCommand × 2
-- [ ] T4 (検証 + Docs): test / `x space search "AI"` / `x trends get 1118370` 実機 / CHANGELOG
+#### M34: Spaces + Trends ✅ 完了
+- [x] T1: `internal/xapi/spaces.go` 新規 — 5 関数 + 1 iterator + 3 Option 型 (Lookup/Search/Tweets)
+- [x] T2: `internal/xapi/trends.go` 新規 — 2 関数 + 2 Option 型 (Woeid/Personal、パラメータ名差分を型分離で吸収)
+- [x] T3: `internal/cli/space.go` 新規 — 5 サブコマンド + extractSpaceID + spaceClient interface
+- [x] T4: `internal/cli/trends.go` 新規 — 2 サブコマンド + trendsClient interface
+- [x] T5: `internal/cli/root.go` — AddCommand × 2 + TestRootHelpShowsSpace / TestRootHelpShowsTrends
+- [x] T6 (検証 + Docs): test/lint/vet 全 pass / `docs/x-api.md §1.7` + Rate Limit 表更新 / CHANGELOG `[0.7.0]` draft / spec §6
 - 📄 詳細: [plans/x-m34-spaces-trends.md](./x-m34-spaces-trends.md)
+- 留意 (M34 検証結果): SearchSpaces は X API がページネーション非対応 (`docs.x.com` で検証済、`SpaceSearchOption` は将来の next_token 追加に備え独立型として確保)。Trends は 2 endpoint で `max_trends` / `personalized_trend.fields` というパラメータ名差分があり、`TrendWoeidOption` / `TrendPersonalOption` で型分離 (M34 D-4)。aggregator generics 化は M33 D-2 に続き継続見送り (M34 D-8、M35 で再評価)
 
 #### M35: DM Read (Pro 推奨) ⏳ 未着手
 - [ ] T1: `internal/xapi/dm.go` 新規 — `GetDMEvents` / `GetDMConversation` / `GetDMWithUser`
