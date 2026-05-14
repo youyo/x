@@ -31,8 +31,8 @@ M28 までの全 28 マイルストーンが完了 (v0.3.0 リリース準備完
 1. **M29**: Posts Lookup + Note Tweet + Social Signals (v0.4.0) ✅ 完了
 2. **M30**: Search Recent + Thread コマンド (v0.5.0) ✅ 完了
 3. **M31**: User Timelines (v0.5.0) ✅ 完了
-4. **M32**: Users Extended (v0.6.0) ← 次の着手対象
-5. **M33**: Lists (v0.6.0)
+4. **M32**: Users Extended (v0.6.0) ✅ 完了
+5. **M33**: Lists (v0.6.0) ← 次の着手対象
 6. **M34**: Spaces + Trends (v0.7.0)
 7. **M35**: DM Read (v0.7.0、Pro 推奨)
 8. **M36**: MCP v2 Tools (v0.8.0、CLI M29-M35 全完了後)
@@ -326,11 +326,11 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - [x] T4 (検証 + Docs): test 34 新規ケース pass / lint 0 / vet 0 / `docs/x-api.md` (max_results 非対称 + exclude 差分 + Rate Limit 表) / spec §6 / README 英日 / CHANGELOG `[0.5.0]` 拡張
 - 📄 詳細: [plans/x-m31-timelines.md](./x-m31-timelines.md)
 
-#### M32: Users Extended ⏳ 未着手
-- [ ] T1: `internal/xapi/users.go` 拡張 — `GetUser` / `GetUsers` / `GetUserByUsername` / `GetUsersByUsernames` / `SearchUsers` / `GetFollowing` / `GetFollowers` / `GetBlocking` / `GetMuting` + `EachUserGraphPage`
-- [ ] T2: `internal/cli/user.go` 新規 — `user get` / `user followers` / `user following` / `user blocking` / `user muting` / `user search`
-- [ ] T3: `internal/cli/root.go` — `AddCommand(newUserCmd())`
-- [ ] T4 (検証 + Docs): test / `x user get @youyo` / `x user followers` 実機 / CHANGELOG
+#### M32: Users Extended ✅ 完了
+- [x] T1: `internal/xapi/users.go` 拡張 — `GetUser` / `GetUsers` / `GetUserByUsername` / `GetUsersByUsernames` / `SearchUsers` / `GetFollowing` / `GetFollowers` / `GetBlocking` / `GetMuting` + 5 iterator (`EachSearchUsersPage` / `Each{Following,Followers,Blocking,Muting}Page`)
+- [x] T2: `internal/cli/user.go` 新規 — `user get` / `user search` / `user following` / `user followers` / `user blocking` / `user muting` + `extractUserRef` (ID/@username/URL 判別)
+- [x] T3: `internal/cli/root.go` — `AddCommand(newUserCmd())` + TestRootHelpShowsUser
+- [x] T4 (検証 + Docs): test 55+ ケース pass / lint 0 / vet 0 / `docs/x-api.md` §1.5 + Rate Limit 表 / spec §6 / README 英日 / CHANGELOG 新規 `[0.6.0]`
 - 📄 詳細: [plans/x-m32-users-extended.md](./x-m32-users-extended.md)
 
 #### M33: Lists ⏳ 未着手
