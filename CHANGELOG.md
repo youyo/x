@@ -4,6 +4,55 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-15 (draft)
+
+Phase I (readonly API 包括サポート) の最終マイルストーン。M29-M35 で追加した CLI 機能を MCP tools として一括公開する (M36)。18 個の readonly tools を追加し、Remote MCP からも tweet lookup / search / timeline / users / lists / spaces / trends にアクセスできるようになった。**「CLI が主 / MCP は薄いラッパー」** という既存方針を踏襲し、xapi 層を直接呼び出すだけのハンドラ実装に留めている。MCP モードは引き続き env-only で動作 (`credentials.toml` 読まない、spec §11 不変条件)。
+
+### Added
+
+#### MCP tools 18 個追加 (M36)
+
+- **Tweet 系** (`internal/mcp/tools_tweet.go`): `get_tweet` / `get_tweets` / `get_liking_users` / `get_retweeted_by` / `get_quote_tweets`
+- **Search 系** (`internal/mcp/tools_search.go`): `search_recent_tweets` / `get_tweet_thread`
+  - `search_recent_tweets`: JST ヘルパ (`yesterday_jst` / `since_jst`) + `all` + `max_pages` + 全 fields
+  - `get_tweet_thread`: 2 段呼び出し (GetTweet → SearchRecent) + `author_only` フィルタ
+- **Timeline 系** (`internal/mcp/tools_timeline.go`): `get_user_tweets` / `get_user_mentions` / `get_home_timeline`
+  - `user_id` 省略時は `GetUserMe` で self 解決 (CLI と同じ振る舞い)
+- **Users 系** (`internal/mcp/tools_users.go`): `get_user` / `get_user_by_username` / `get_user_following` / `get_user_followers`
+- **Lists 系** (`internal/mcp/tools_lists.go`): `get_list` / `get_list_tweets`
+- **Misc 系** (`internal/mcp/tools_misc.go`): `search_spaces` / `get_trends`
+
+#### MCP server.go の RegisterTool 拡張
+
+- `NewServer` 内に 6 つの `registerToolXxx(s, client)` 呼び出しを追加 (`tools_tweet` / `tools_search` / `tools_timeline` / `tools_users` / `tools_lists` / `tools_misc`)
+- `tools/list` が全 20 ツール (既存 2 + 新規 18) を返すように
+
+#### MCP `get_liked_tweets` の T0 修正 (M29 handoff)
+
+- `internal/mcp/tools_likes.go` の `likedDefaultTweetFields` に `note_tweet` を追加
+- CLI M29 で `liked list` の既定 tweet.fields に `note_tweet` を追加したが、MCP モードは `config.toml` を読まないため自動波及せず、本 M36 着手時の最初のタスクとして対応 (spec §11 不変条件)
+
+#### Routine プロンプトの拡張 (`docs/routine-prompt.md`)
+
+- 「3.1 拡張ユースケース」を追加: M36 で増えた tools を Routine から活用する代表パターンを 5 例掲載 (`get_tweet_thread` / `search_recent_tweets` + JST / `get_user_tweets` / `get_list_tweets` / `get_trends`)
+
+### Design Decisions (M36)
+
+- **D-1 1 ハンドラ 1 ツール**: `NewGetXxxHandler(client)` factory + `registerToolXxx(s, client)` ペア (tools_me.go / tools_likes.go と同じパターン)
+- **D-2 Default values 最小**: `likedDefaultTweetFields` 以外には MCP 固有の default 配列を作らない (env-only 制約)
+- **D-3 URL → ID 解決は MCP 層では行わない**: MCP は ID 文字列を素直に受ける。URL 解決は CLI 層 (extractTweetID 等) の責務
+- **D-4 user_id 省略時の self 解決**: timeline 3 ツールのみ実装 (`get_user_tweets` / `get_user_mentions` / `get_home_timeline`)。tweet 系 / user 系 / list 系では明示必須
+- **D-5 出力スキーマ**: xapi の Response 型をそのまま StructuredContent + TextContent (JSON) として返す
+- **D-6 JST 優先順位**: 4 ツール (`search_recent_tweets` / `get_user_tweets` / `get_user_mentions` / `get_home_timeline`) で `yesterday_jst > since_jst > start/end_time` (M18 と統一)
+- **D-7 max_results バリデーション**: `search_recent_tweets` / `get_tweet_thread` で `< 10` はエラー (CLI 側の自動補正は実装せず、MCP では誤入力を弾く)
+
+### Compatibility
+
+- v0.7.0 以前の CLI / MCP 機能は完全後方互換
+- 既存 MCP tools (`get_user_me` / `get_liked_tweets`) のスキーマ・引数仕様に変更なし
+- `tools/list` の戻り値は新規 18 ツールを含むため、ハードコード件数で aborts するクライアントは更新が必要
+- `credentials.toml` を絶対に読まない不変条件は維持 (`TestLoadMCPCredentials_IgnoresFile` で pin 済)
+
 ## [0.7.0] - 2026-05-15 (draft)
 
 X API v2 の Spaces 系 5 エンドポイントと Trends 系 2 エンドポイントを `x space` / `x trends` サブコマンドとして CLI に追加する (M34)。Spaces はアクティブな Space (live/scheduled) のみ取得可能。SearchSpaces は X API がページネーション非対応のため `--all` を提供しない。Trends は 2 endpoint でパラメータ名 (`max_trends` / `personalized_trend.fields`) と返却フィールドが異なるため、xapi 層では Option 型を分離した。

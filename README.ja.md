@@ -284,10 +284,62 @@ AWS_REGION=ap-northeast-1 \
 
 ### 利用可能な MCP tools
 
+全 **20 ツール** (v0.8.0)。元からの 2 ツールに加え、M36 で CLI M29-M35 コマンドの薄いラッパーとして 18 個の readonly ツールを追加。全ツールが env-only モードで動作 (`credentials.toml` 読まない、spec §11 不変条件)。
+
+#### Basic
+
 | Tool | 説明 |
 |---|---|
 | `get_user_me` | OAuth 1.0a ユーザーの `{ user_id, username, name }` を返す。 |
 | `get_liked_tweets` | Liked Posts を全ページング (`all=true`, `max_pages`, rate-limit aware) 込みで返す。`user_id` / `start_time` / `end_time` / `since_jst` / `yesterday_jst` / `max_results` / `tweet_fields` / `expansions` / `user_fields` を受け取る。JST ヘルパの優先順位は `yesterday_jst > since_jst > start_time/end_time` (CLI と統一)。 |
+
+#### Tweet (M36)
+
+| Tool | 説明 |
+|---|---|
+| `get_tweet` | 単一ツイート取得 (`tweet_id`)。`tweet_fields` / `expansions` / `user_fields` / `media_fields` を受け取る。 |
+| `get_tweets` | バッチツイート取得 (`tweet_ids` 1-100)。同フィールド指定。 |
+| `get_liking_users` | ツイートを Like したユーザー一覧。`max_results` (1-100) / `pagination_token` / fields。 |
+| `get_retweeted_by` | ツイートをリツイートしたユーザー一覧。同オプション。 |
+| `get_quote_tweets` | 引用ツイート一覧。`exclude` / `max_results` (1-100) / fields。 |
+
+#### Search (M36)
+
+| Tool | 説明 |
+|---|---|
+| `search_recent_tweets` | Recent Search (過去 7 日)。`query` / JST ヘルパ (`yesterday_jst` / `since_jst`) / `start_time` / `end_time` / `max_results` (10-100) / `all` + `max_pages` / fields。 |
+| `get_tweet_thread` | 2 段呼び出しによる会話スレッド取得 (`GetTweet` → `SearchRecent` with `conversation_id:`)。`author_only` で root 投稿者の連投のみ抽出。 |
+
+#### Timeline (M36)
+
+| Tool | 説明 |
+|---|---|
+| `get_user_tweets` | 任意ユーザーのツイート (`GET /2/users/:id/tweets`)。`user_id` 省略時は `GetUserMe` で self 解決。`max_results` (5-100) / JST ヘルパ / `exclude` / `since_id` / `until_id` / `all` + `max_pages` / fields。 |
+| `get_user_mentions` | 任意ユーザーへのメンション (`GET /2/users/:id/mentions`)。`exclude` なし、それ以外は同オプション。 |
+| `get_home_timeline` | 認証ユーザーのホームタイムライン (`GET /2/users/:id/timelines/reverse_chronological`)。`exclude` は `replies,retweets` のみ。 |
+
+#### Users (M36)
+
+| Tool | 説明 |
+|---|---|
+| `get_user` | 単一ユーザー取得 (`user_id`)。 |
+| `get_user_by_username` | username 指定 (@ なし) で単一ユーザー取得。 |
+| `get_user_following` | フォロー中のユーザー一覧 (1-1000/page)。`all` + `max_pages`。 |
+| `get_user_followers` | フォロワー一覧。同オプション。 |
+
+#### Lists (M36)
+
+| Tool | 説明 |
+|---|---|
+| `get_list` | 単一 List 取得 (`list_id`)。 |
+| `get_list_tweets` | List のツイートをページング込みで取得。`max_results` (1-100) / `all` + `max_pages` / fields。 |
+
+#### Misc (M36)
+
+| Tool | 説明 |
+|---|---|
+| `search_spaces` | アクティブ Space を query で検索。`state` (live/scheduled/all) / `max_results` (1-100) / fields。ページネーション無し (X API 仕様)。 |
+| `get_trends` | WOEID 指定トレンド (`GET /2/trends/by/woeid/:woeid`)。`max_trends` (10-50) / `trend_fields`。代表 WOEID: 1118370 (東京) / 23424856 (日本) / 1 (全世界)。 |
 
 ### MCP クライアントレシピ
 

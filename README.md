@@ -283,10 +283,62 @@ Store backends:
 
 ### Available MCP tools
 
+Total **20 tools** (v0.8.0). Two original tools plus 18 readonly tools added in M36 as thin wrappers around the CLI's M29-M35 commands. All tools run in env-only mode (no `credentials.toml` access, spec §11 invariant).
+
+#### Basic
+
 | Tool | Description |
 |---|---|
 | `get_user_me` | Returns `{ user_id, username, name }` for the OAuth 1.0a user. |
 | `get_liked_tweets` | Returns Liked posts with full pagination (`all=true`, `max_pages`, rate-limit aware). Accepts `user_id`, `start_time` / `end_time`, `since_jst`, `yesterday_jst`, `max_results`, `tweet_fields`, `expansions`, `user_fields`. JST helpers take precedence: `yesterday_jst > since_jst > start_time/end_time` (matches the CLI). |
+
+#### Tweet (M36)
+
+| Tool | Description |
+|---|---|
+| `get_tweet` | Single tweet lookup by `tweet_id`. Accepts `tweet_fields`, `expansions`, `user_fields`, `media_fields`. |
+| `get_tweets` | Batch tweet lookup (1-100 ids). Same fields options. |
+| `get_liking_users` | Users who liked the tweet. Accepts `max_results` (1-100), `pagination_token`, fields. |
+| `get_retweeted_by` | Users who retweeted the tweet. Same options as `get_liking_users`. |
+| `get_quote_tweets` | Quote tweets of the target tweet. Accepts `exclude`, `max_results` (1-100), fields. |
+
+#### Search (M36)
+
+| Tool | Description |
+|---|---|
+| `search_recent_tweets` | Recent search (last 7 days). Accepts `query`, JST helpers (`yesterday_jst`, `since_jst`), `start_time` / `end_time`, `max_results` (10-100), `all` + `max_pages`, fields. |
+| `get_tweet_thread` | Two-stage conversation thread fetch (`GetTweet` → `SearchRecent` with `conversation_id:` query). Accepts `author_only` to filter to root author's replies. |
+
+#### Timeline (M36)
+
+| Tool | Description |
+|---|---|
+| `get_user_tweets` | A user's tweets (`GET /2/users/:id/tweets`). `user_id` optional (resolves to self via `GetUserMe` when omitted). `max_results` (5-100), JST helpers, `exclude`, `since_id` / `until_id`, `all` + `max_pages`, fields. |
+| `get_user_mentions` | A user's mentions (`GET /2/users/:id/mentions`). Same options, no `exclude`. |
+| `get_home_timeline` | Authenticated user's home timeline (`GET /2/users/:id/timelines/reverse_chronological`). Same options, `exclude` limited to `replies,retweets`. |
+
+#### Users (M36)
+
+| Tool | Description |
+|---|---|
+| `get_user` | Single user by `user_id`. |
+| `get_user_by_username` | Single user by `username` (without `@`). |
+| `get_user_following` | Following list (1-1000 per page). Accepts `all` + `max_pages`. |
+| `get_user_followers` | Followers list. Same options as `get_user_following`. |
+
+#### Lists (M36)
+
+| Tool | Description |
+|---|---|
+| `get_list` | Single List by `list_id`. |
+| `get_list_tweets` | Tweets in a List with pagination. Accepts `max_results` (1-100), `all` + `max_pages`, fields. |
+
+#### Misc (M36)
+
+| Tool | Description |
+|---|---|
+| `search_spaces` | Search active Spaces by query. Accepts `state` (live/scheduled/all), `max_results` (1-100), fields. No pagination (X API limitation). |
+| `get_trends` | WOEID-scoped trends (`GET /2/trends/by/woeid/:woeid`). Accepts `max_trends` (10-50), `trend_fields`. Representative WOEIDs: 1118370 (Tokyo) / 23424856 (Japan) / 1 (Worldwide). |
 
 ### MCP client recipes
 

@@ -18,24 +18,24 @@
 | 制約 | TDD 必須 / Go 1.26.x / mark3labs/mcp-go / **cobra (kong から変更)** / idproxy 4 store / OSS 公開 |
 | 対象リポジトリ | `/Users/youyo/src/github.com/youyo/x` |
 | 作成日 | 2026-05-12 |
-| 最終更新 | 2026-05-14 (M29-M36 追加キューイング) |
-| ステータス | 🚧 v0.4.0 開発完了 (M29) / v0.5.0〜v0.8.0 計画中 |
+| 最終更新 | 2026-05-15 (M36 完了、Phase I 全完了) |
+| ステータス | ✅ Phase I 全完了 (M29-M36)、v0.4.0〜v0.8.0 draft |
 | スペック | `docs/specs/x-spec.md` (v1.0.0 Approved) |
 | マイルストーン総数 | 36 (M29-M36 追加、細粒度方針) |
 
 ## Current Focus
 
-M28 までの全 28 マイルストーンが完了 (v0.3.0 リリース準備完了)。次フェーズとして **readonly API 包括サポート (M29-M36)** を計画中。
+M28 までの基盤 28 マイルストーン + Phase I (M29-M36) の全 36 マイルストーンが完了。Phase I は readonly API 包括サポートとして CLI と MCP に readonly エンドポイント約 35 件を追加した。次フェーズ (Phase II) は未定。
 
-**Phase I 優先順**:
+**Phase I 完了一覧**:
 1. **M29**: Posts Lookup + Note Tweet + Social Signals (v0.4.0) ✅ 完了
 2. **M30**: Search Recent + Thread コマンド (v0.5.0) ✅ 完了
 3. **M31**: User Timelines (v0.5.0) ✅ 完了
 4. **M32**: Users Extended (v0.6.0) ✅ 完了
 5. **M33**: Lists (v0.6.0) ✅ 完了
 6. **M34**: Spaces + Trends (v0.7.0) ✅ 完了
-7. **M35**: DM Read (v0.7.0、Pro 推奨)
-8. **M36**: MCP v2 Tools (v0.8.0、CLI M29-M35 全完了後)
+7. **M35**: DM Read (v0.7.0、Pro 推奨) ✅ 完了
+8. **M36**: MCP v2 Tools (v0.8.0、CLI M29-M35 全完了後) ✅ 完了
 
 **残タスク (ユーザー手動)**:
 1. GitHub remote (`https://github.com/youyo/x`) 設定 + repository secrets (`HOMEBREW_TAP_GITHUB_TOKEN`) 登録
@@ -358,15 +358,18 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - 📄 詳細: [plans/x-m35-dm-read.md](./x-m35-dm-read.md)
 - 留意 (M35 検証結果): Basic tier では DM 系のレート制限が約 1 req / 24h と極端に厳しく事実上使用不可。**Pro tier ($5,000/月) 以上を推奨**。取得可能なのは直近 30 日以内のイベントのみ。Includes 構造体に Media フィールドを追加したことで likes/timeline/list tweets/space tweets 等の `expansions=attachments.media_keys` も silent drop しなくなった (M35 D-5 net improvement)。aggregator generics 化は M36 で再評価 (M35 D-9)
 
-#### M36: MCP v2 Tools (CLI M29-M35 の薄いラッパー) ⏳ 未着手
-- [ ] `internal/mcp/tools_tweet.go` — get_tweet / get_tweets / get_liking_users / get_retweeted_by / get_quote_tweets
-- [ ] `internal/mcp/tools_search.go` — search_recent_tweets / get_tweet_thread
-- [ ] `internal/mcp/tools_timeline.go` — get_user_tweets / get_user_mentions / get_home_timeline
-- [ ] `internal/mcp/tools_users.go` — get_user / get_user_by_username / get_user_following / get_user_followers
-- [ ] `internal/mcp/tools_lists.go` — get_list / get_list_tweets
-- [ ] `internal/mcp/tools_misc.go` — search_spaces / get_trends
-- [ ] test / docs/routine-prompt.md 更新 / CHANGELOG [0.8.0]
+#### M36: MCP v2 Tools (CLI M29-M35 の薄いラッパー) ✅ 完了
+- [x] T0: `internal/mcp/tools_likes.go` の `likedDefaultTweetFields` に `note_tweet` 追加 (M29 handoff)
+- [x] T1: `internal/mcp/tools_tweet.go` — `get_tweet` / `get_tweets` / `get_liking_users` / `get_retweeted_by` / `get_quote_tweets`
+- [x] T2: `internal/mcp/tools_search.go` — `search_recent_tweets` / `get_tweet_thread` (2 段呼び出し + author_only)
+- [x] T3: `internal/mcp/tools_timeline.go` — `get_user_tweets` / `get_user_mentions` / `get_home_timeline` (self 解決対応)
+- [x] T4: `internal/mcp/tools_users.go` — `get_user` / `get_user_by_username` / `get_user_following` / `get_user_followers`
+- [x] T5: `internal/mcp/tools_lists.go` — `get_list` / `get_list_tweets`
+- [x] T6: `internal/mcp/tools_misc.go` — `search_spaces` / `get_trends`
+- [x] T7: `internal/mcp/server.go` の `NewServer` で 6 つの新規 `registerToolXxx` 呼び出しを追加 (全 20 ツール公開)
+- [x] T8 (検証 + Docs): test 全 pass / lint 0 / vet 0 / `docs/routine-prompt.md` 3.1 節追加 / README 英日 MCP tools 表更新 / CHANGELOG `[0.8.0]` draft / spec §11 不変条件は維持
 - 📄 詳細: [plans/x-m36-mcp-v2-tools.md](./x-m36-mcp-v2-tools.md)
+- 留意 (M36 検証結果): TestLoadMCPCredentials_IgnoresFile が引き続き pass。MCP 全 20 ツールが `tools/list` で公開される。aggregator は CLI 同様に各 tool ファイル内に独立実装 (M33-M35 と同じ "独立実装" 方針を踏襲、generics 化は Phase II で再評価)
 
 ## Architecture Decisions (spec 引き継ぎ + 追加)
 
@@ -404,6 +407,7 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 | 2026-05-12 | 変更 | CLI パーサを **kong → cobra** に変更 (ユーザー提案受諾)。理由: OSS デファクト + `__complete` 標準補完 + viper 統合 + ヘルプ/マンページ標準化。M1 詳細計画を Cobra ベースで全面刷新 (テストケース 30→21、LOC 800→530、completion.go 不要)。spec §10/§5 ADR #4 を ExitPlanMode 後に修正 |
 | 2026-05-12 | 完了 | M16-M28 を一括完了マーク化 (commit hash 追記)。全 28 マイルストーン達成、v0.3.0 文書セット (docs/x-api.md + docs/routine-prompt.md + CHANGELOG + README 英日) を整備済み。残タスクはユーザー手動の git push + タグ push のみ |
 | 2026-05-14 | 追加 | M29-M36 (readonly API 包括サポート) をキューイング — Posts Lookup+Social Signals / Search+Thread / Timelines / Users Extended / Lists / Spaces+Trends / DM Read / MCP v2 Tools の 8 段階。Streaming・Bookmarks・Bearer 専用・Enterprise 専用は除外。ADR #15 追加。 |
+| 2026-05-15 | 完了 | Phase I (M29-M36) 全完了。M36 で MCP に readonly tools 18 個を追加 (全 20 ツール公開、CHANGELOG `[0.8.0]` draft)。Phase II は未定 (Write 系 / Streaming / OAuth 2.0 PKCE 等は今後検討)。 |
 
 ---
 

@@ -48,7 +48,14 @@ sequenceDiagram
 - `x` MCP サーバーが Function URL (or 任意の HTTPS エンドポイント) で動作している。
   - デプロイ手順は [`../examples/lambroll/README.md`](../examples/lambroll/README.md) を参照。
 - Routines のコネクター MCP に以下 2 つを登録済み:
-  - **x** — 本リポジトリ提供 (`get_user_me` / `get_liked_tweets`)
+  - **x** — 本リポジトリ提供 (全 20 ツール、M36 で readonly API カバレッジを拡張):
+    - **基本**: `get_user_me` / `get_liked_tweets`
+    - **Tweet 系 (M36)**: `get_tweet` / `get_tweets` / `get_liking_users` / `get_retweeted_by` / `get_quote_tweets`
+    - **Search 系 (M36)**: `search_recent_tweets` / `get_tweet_thread`
+    - **Timeline 系 (M36)**: `get_user_tweets` / `get_user_mentions` / `get_home_timeline`
+    - **Users 系 (M36)**: `get_user` / `get_user_by_username` / `get_user_following` / `get_user_followers`
+    - **Lists 系 (M36)**: `get_list` / `get_list_tweets`
+    - **Misc 系 (M36)**: `search_spaces` / `get_trends`
   - **logvalet** — 別途構築 (Backlog 連携 MCP、`logvalet_issue_list` / `logvalet_issue_create` 等)
 - シークレット類 (X API トークン / OIDC Client Secret / Cookie Secret) は **Lambda 環境変数 + SSM Parameter Store** で完結しており、Routines 側には保管しない。
 
@@ -144,6 +151,57 @@ JST タイムゾーンで動作しています。出力は日本語。
 
 エラーが発生した場合はそこで停止し、エラー内容をそのまま報告する。Backlog の不要な重複登録を避けるため、リトライは行わない。
 ````
+
+## 3.1 拡張ユースケース (M36 で追加されたツールの活用例)
+
+M36 で 18 個の readonly ツールが追加されたことで、Routines は単純な Liked Posts 抽出を超えた幅広いデータ収集が可能になった。代表的なパターン:
+
+### 3.1.1 任意のツイートの会話スレッドを取得
+
+```markdown
+## ステップ: 指定ツイートのスレッドを取得し技術判定
+- ツール: `get_tweet_thread`
+- 入力: { "tweet_id": "<root tweet ID>", "author_only": true, "max_results": 100 }
+- 出力: created_at 昇順に並んだ会話ツイート列。author_only=true で root 投稿者の連投のみ抽出
+```
+
+### 3.1.2 特定キーワードのリアルタイム調査
+
+```markdown
+## ステップ: ハッシュタグやキーワードを過去 7 日で検索
+- ツール: `search_recent_tweets`
+- 入力: { "query": "#AI lang:ja", "yesterday_jst": true, "max_results": 100, "all": true, "max_pages": 5 }
+- 出力: 検索条件にマッチしたツイート全件
+```
+
+### 3.1.3 自分以外のユーザーのタイムラインを覗く
+
+```markdown
+## ステップ: 任意のユーザーの直近ツイートを取得
+- ツール 1: `get_user_by_username` (入力: { "username": "alice" }) → user_id を取得
+- ツール 2: `get_user_tweets` (入力: { "user_id": "<上記>", "exclude": ["replies","retweets"], "max_results": 50 })
+```
+
+### 3.1.4 リスト経由でキュレーションされた情報を取得
+
+```markdown
+## ステップ: 技術リストの最新ツイートを取得
+- ツール: `get_list_tweets`
+- 入力: { "list_id": "<list ID>", "max_results": 100, "all": true, "max_pages": 3 }
+```
+
+### 3.1.5 トレンドの監視 (日本 = 23424856)
+
+```markdown
+## ステップ: 日本のトレンドを取得し技術系トピックをフィルタ
+- ツール: `get_trends`
+- 入力: { "woeid": 23424856, "max_trends": 50 }
+```
+
+これらのツールはすべて env のみで動作する (file 読まない、spec §11 不変条件)。
+JST 系パラメータ (`yesterday_jst` / `since_jst`) は `search_recent_tweets` / `get_user_tweets` /
+`get_user_mentions` / `get_home_timeline` の 4 ツールで `get_liked_tweets` と同じ優先順位
+(`yesterday_jst > since_jst > start_time/end_time`) で動作する。
 
 ## 4. 失敗モードと対処
 
