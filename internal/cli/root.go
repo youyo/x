@@ -51,6 +51,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newTweetCmd())
 	root.AddCommand(newTimelineCmd())
 	root.AddCommand(newUserCmd())
+	root.AddCommand(newListCmd())
 	root.AddCommand(newConfigureCmd())
 	root.AddCommand(newMcpCmd())
 	// NOTE: completion サブコマンドは Cobra が自動追加する (HasAvailableSubCommands が真のため)。
