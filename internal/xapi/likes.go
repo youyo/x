@@ -13,13 +13,9 @@ import (
 )
 
 // likes.go 固有の定数群。
-// rateLimitMaxWait (= 15 * time.Minute) は client.go 側で定義済みの定数を再利用する。
+// rateLimitMaxWait (= 15 * time.Minute) は client.go 側、defaultInterPageDelay (= 200ms)
+// および computeInterPageWait は pagination.go 側で定義済みのものを再利用する (M29 T7)。
 const (
-	// likesMinInterPageDelay は EachLikedPage がページ間に最低限挟む待機時間である
-	// (spec §10 「ページ間の最小待機: 200ms (バースト抑止)」)。
-	// rate-limit に余裕がある場合はこの値だけ sleep し、枯渇間際 (remaining <= 閾値) では
-	// reset 時刻までの sleep に置き換わる (最大 rateLimitMaxWait)。
-	likesMinInterPageDelay = 200 * time.Millisecond
 	// likesDefaultMaxPages は WithMaxPages 未指定時の上限ページ数である
 	// (spec §10 `--max-pages` (default: 50))。
 	likesDefaultMaxPages = 50
@@ -245,7 +241,7 @@ func (c *Client) EachLikedPage(
 			// max_pages 到達。fn は呼び終わっているのでここで正常終了 (sleep 不要)。
 			return nil
 		}
-		wait := c.computeLikesInterPageWait(fetched.rateLimit)
+		wait := c.computeInterPageWait(fetched.rateLimit, likesRateLimitThreshold)
 		if err := c.sleep(ctx, wait); err != nil {
 			return err
 		}
@@ -253,29 +249,6 @@ func (c *Client) EachLikedPage(
 		cfg.paginationToken = next
 	}
 	return nil
-}
-
-// computeLikesInterPageWait はページ間待機時間を計算する (spec §10 / plans D-3)。
-//
-// 規則:
-//   - rateLimit が未取得 (Raw=false) → 最小 200ms
-//   - Remaining > 閾値 → 最小 200ms
-//   - Remaining ≤ 閾値 かつ Reset が未来 → reset までの差分 (最大 rateLimitMaxWait)
-//     ただし 200ms より短ければ 200ms にフォールバック (advisor 指摘#1)
-//   - Reset が過去 (clock skew) → 200ms にフォールバック
-func (c *Client) computeLikesInterPageWait(rl RateLimitInfo) time.Duration {
-	wait := likesMinInterPageDelay
-	if !rl.Raw || rl.Remaining < 0 || rl.Remaining > likesRateLimitThreshold || rl.Reset.IsZero() {
-		return wait
-	}
-	until := rl.Reset.Sub(c.now())
-	if until > rateLimitMaxWait {
-		until = rateLimitMaxWait
-	}
-	if until > wait {
-		wait = until
-	}
-	return wait
 }
 
 // likedTweetsFetched は単一ページの取得結果である (本体 + rate-limit ヘッダ情報)。
