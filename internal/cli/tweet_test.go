@@ -880,3 +880,352 @@ func TestTweetSearch_NoJSON_NDJSON_MutuallyExclusive(t *testing.T) {
 		t.Errorf("err = %v, want ErrInvalidArgument", err)
 	}
 }
+
+// -- tweet thread ---------------------------------------------------------
+
+// newThreadTestServer は GetTweet (root resolve) + SearchRecent を組み合わせるモック。
+func newThreadTestServer(t *testing.T, rootBody string, searchBody string) (*httptest.Server, *tweetHandlerState) {
+	t.Helper()
+	state := &tweetHandlerState{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		state.record(r)
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/2/tweets/search/recent"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(searchBody))
+		case strings.HasPrefix(r.URL.Path, "/2/tweets/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(rootBody))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, state
+}
+
+// TestTweetThread_BasicFlow_TwoStepCall は GetTweet → SearchRecent の 2 段呼びを検証する。
+func TestTweetThread_BasicFlow_TwoStepCall(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	rootBody := `{"data":{"id":"100","text":"root","author_id":"42","conversation_id":"999","created_at":"2026-05-12T00:00:00Z"}}`
+	searchBody := `{"data":[
+		{"id":"100","text":"root","author_id":"42","created_at":"2026-05-12T00:00:00Z"},
+		{"id":"101","text":"reply1","author_id":"7","created_at":"2026-05-12T00:01:00Z"},
+		{"id":"102","text":"reply2","author_id":"42","created_at":"2026-05-12T00:02:00Z"}
+	],"meta":{"result_count":3}}`
+
+	srv, state := newThreadTestServer(t, rootBody, searchBody)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	paths, _ := state.snapshot()
+	if len(paths) != 2 {
+		t.Fatalf("paths = %v, want 2 calls", paths)
+	}
+	if paths[0] != "/2/tweets/100" {
+		t.Errorf("first path = %q, want /2/tweets/100", paths[0])
+	}
+	if paths[1] != "/2/tweets/search/recent" {
+		t.Errorf("second path = %q, want /2/tweets/search/recent", paths[1])
+	}
+	var got xapi.SearchResponse
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(got.Data) != 3 {
+		t.Errorf("Data len = %d, want 3", len(got.Data))
+	}
+}
+
+// TestTweetThread_UsesURLArgument_ExtractsID は URL 引数からの ID 抽出を検証する。
+func TestTweetThread_UsesURLArgument_ExtractsID(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	rootBody := `{"data":{"id":"100","text":"x","author_id":"42","conversation_id":"999"}}`
+	searchBody := `{"data":[]}`
+	srv, state := newThreadTestServer(t, rootBody, searchBody)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "https://x.com/u/status/100?s=20"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	paths, _ := state.snapshot()
+	if len(paths) < 1 || paths[0] != "/2/tweets/100" {
+		t.Errorf("first path = %v, want /2/tweets/100", paths)
+	}
+}
+
+// TestTweetThread_RootMissingConversationID は conversation_id 欠落で plain error (exit 1) を確認する。
+func TestTweetThread_RootMissingConversationID(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	// conversation_id を含まないレスポンス
+	rootBody := `{"data":{"id":"100","text":"root","author_id":"42"}}`
+	srv, _ := newThreadTestServer(t, rootBody, `{"data":[]}`)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing conversation_id")
+	}
+	// plain error (not wrapped) → exit 1 fallback
+	if errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("err should NOT be ErrInvalidArgument (it's a data condition, exit 1 not exit 2): %v", err)
+	}
+	if !strings.Contains(err.Error(), "conversation_id") {
+		t.Errorf("error message should mention conversation_id, got: %v", err)
+	}
+}
+
+// TestTweetThread_AuthorOnlyFilter は --author-only でルート author 以外を除外する。
+func TestTweetThread_AuthorOnlyFilter(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	rootBody := `{"data":{"id":"100","text":"root","author_id":"42","conversation_id":"999","created_at":"2026-05-12T00:00:00Z"}}`
+	searchBody := `{"data":[
+		{"id":"100","text":"root","author_id":"42","created_at":"2026-05-12T00:00:00Z"},
+		{"id":"101","text":"reply by other","author_id":"7","created_at":"2026-05-12T00:01:00Z"},
+		{"id":"102","text":"reply by self","author_id":"42","created_at":"2026-05-12T00:02:00Z"}
+	],"meta":{"result_count":3}}`
+
+	srv, _ := newThreadTestServer(t, rootBody, searchBody)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100", "--author-only"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got xapi.SearchResponse
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(got.Data) != 2 {
+		t.Errorf("Data = %+v, want 2 (root + self reply)", got.Data)
+	}
+	for _, tw := range got.Data {
+		if tw.AuthorID != "42" {
+			t.Errorf("non-root author in --author-only output: %+v", tw)
+		}
+	}
+	if got.Meta.ResultCount != 2 {
+		t.Errorf("Meta.ResultCount = %d, want 2 (post-filter)", got.Meta.ResultCount)
+	}
+}
+
+// TestTweetThread_AllPaginates は --all で複数ページを走査することを確認する。
+func TestTweetThread_AllPaginates(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	state := &tweetHandlerState{}
+	var searchIdx int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		state.record(r)
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/2/tweets/search/recent"):
+			i := int(atomic.AddInt32(&searchIdx, 1) - 1)
+			w.WriteHeader(http.StatusOK)
+			switch i {
+			case 0:
+				_, _ = w.Write([]byte(`{"data":[{"id":"100","author_id":"42","created_at":"2026-05-12T00:00:00Z"}],"meta":{"result_count":1,"next_token":"P1"}}`))
+			case 1:
+				_, _ = w.Write([]byte(`{"data":[{"id":"101","author_id":"42","created_at":"2026-05-12T00:01:00Z"}],"meta":{"result_count":1}}`))
+			default:
+				t.Errorf("search called too many times: %d", i+1)
+			}
+		case strings.HasPrefix(r.URL.Path, "/2/tweets/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"id":"100","author_id":"42","conversation_id":"999"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100", "--all"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got xapi.SearchResponse
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(got.Data) != 2 {
+		t.Errorf("Data = %+v, want 2 (aggregated)", got.Data)
+	}
+}
+
+// TestTweetThread_NoJSON_Human は human フォーマット出力を確認する。
+func TestTweetThread_NoJSON_Human(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	rootBody := `{"data":{"id":"100","text":"root","author_id":"42","conversation_id":"999","created_at":"2026-05-12T00:00:00Z"}}`
+	searchBody := `{"data":[
+		{"id":"100","text":"hello world","author_id":"42","created_at":"2026-05-12T00:00:00Z"}
+	],"meta":{"result_count":1}}`
+
+	srv, _ := newThreadTestServer(t, rootBody, searchBody)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100", "--no-json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "id=100") || !strings.Contains(out, "text=hello world") {
+		t.Errorf("human output missing expected fields: %q", out)
+	}
+}
+
+// TestTweetThread_SortByCreatedAtAsc は JSON 出力で created_at 昇順ソート (D-4) を確認する。
+func TestTweetThread_SortByCreatedAtAsc(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	rootBody := `{"data":{"id":"100","text":"root","author_id":"42","conversation_id":"999","created_at":"2026-05-12T00:00:00Z"}}`
+	// X API 順 (新しい順) で返す
+	searchBody := `{"data":[
+		{"id":"103","text":"c","author_id":"42","created_at":"2026-05-12T00:03:00Z"},
+		{"id":"102","text":"b","author_id":"42","created_at":"2026-05-12T00:02:00Z"},
+		{"id":"101","text":"a","author_id":"42","created_at":"2026-05-12T00:01:00Z"}
+	],"meta":{"result_count":3}}`
+
+	srv, _ := newThreadTestServer(t, rootBody, searchBody)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var got xapi.SearchResponse
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	wantIDs := []string{"101", "102", "103"}
+	if len(got.Data) != len(wantIDs) {
+		t.Fatalf("Data len = %d, want %d", len(got.Data), len(wantIDs))
+	}
+	for i, id := range wantIDs {
+		if got.Data[i].ID != id {
+			t.Errorf("Data[%d].ID = %q, want %q (ascending sort)", i, got.Data[i].ID, id)
+		}
+	}
+}
+
+// TestTweetThread_NDJSON_StreamingOrder は NDJSON 出力が X API 順 (新しい順) のままであることを確認する (D-4)。
+func TestTweetThread_NDJSON_StreamingOrder(t *testing.T) {
+	setAllXAPIEnv(t)
+
+	rootBody := `{"data":{"id":"100","text":"root","author_id":"42","conversation_id":"999","created_at":"2026-05-12T00:00:00Z"}}`
+	searchBody := `{"data":[
+		{"id":"103","text":"c","author_id":"42","created_at":"2026-05-12T00:03:00Z"},
+		{"id":"102","text":"b","author_id":"42","created_at":"2026-05-12T00:02:00Z"},
+		{"id":"101","text":"a","author_id":"42","created_at":"2026-05-12T00:01:00Z"}
+	],"meta":{"result_count":3}}`
+
+	srv, _ := newThreadTestServer(t, rootBody, searchBody)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100", "--ndjson"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("ndjson lines = %d, want 3", len(lines))
+	}
+	// D-4: NDJSON はストリーミング順 (X API 新しい順) のまま、ソートしない。
+	wantOrder := []string{`"id":"103"`, `"id":"102"`, `"id":"101"`}
+	for i, want := range wantOrder {
+		if !strings.Contains(lines[i], want) {
+			t.Errorf("ndjson[%d] = %q, want substring %q", i, lines[i], want)
+		}
+	}
+}
+
+// TestTweetThread_NoJSON_NDJSON_MutuallyExclusive は両指定で exit 2。
+func TestTweetThread_NoJSON_NDJSON_MutuallyExclusive(t *testing.T) {
+	setAllXAPIEnv(t)
+	srv, _ := newTweetTestServer(t, nil)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "100", "--no-json", "--ndjson"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("err = %v, want ErrInvalidArgument", err)
+	}
+}
+
+// TestTweetThread_InvalidID_ExitsTwo は不正な URL → extractTweetID 失敗で exit 2 を確認する。
+func TestTweetThread_InvalidID_ExitsTwo(t *testing.T) {
+	setAllXAPIEnv(t)
+	srv, _ := newTweetTestServer(t, nil)
+	stubTweetClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"tweet", "thread", "not-a-tweet"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("err = %v, want ErrInvalidArgument", err)
+	}
+}
