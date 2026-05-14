@@ -272,6 +272,37 @@ func TestDMList_NoJSON_HumanFormat(t *testing.T) {
 	}
 }
 
+func TestDMList_All_NDJSON_Streams(t *testing.T) {
+	// advisor 反映: --all + --ndjson の cross product を pin
+	setAllXAPIEnv(t)
+	pageCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		pageCount++
+		w.WriteHeader(http.StatusOK)
+		if pageCount == 1 {
+			_, _ = w.Write([]byte(`{"data":[{"id":"A"}],"meta":{"next_token":"n2"}}`))
+		} else {
+			_, _ = w.Write([]byte(`{"data":[{"id":"B"}],"meta":{}}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stubDMClientFactory(t, srv.URL)
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"dm", "list", "--all", "--ndjson"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	// 2 events、各 1 行
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Errorf("lines = %d, want 2: %q", len(lines), buf.String())
+	}
+}
+
 func TestDMList_NoJSON_NDJSON_MutuallyExclusive(t *testing.T) {
 	setAllXAPIEnv(t)
 	srv, _ := newDMTestServer(t)

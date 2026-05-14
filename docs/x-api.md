@@ -248,6 +248,7 @@ CLI 設計上の判断 (M34):
 - **Basic tier ($100/月) では事実上ほぼ使用不可** — DM 系 endpoint のレート制限が極端に厳しく (約 1 req / 24h)、CLI / MCP からの定期実行は現実的でない。
 - **Pro tier ($5,000/月) 以上を推奨** — 実用的なレート (おおむね 300 req / 15 min) で利用できる。
 - **取得可能なのは直近 30 日以内のイベントのみ** (X API 仕様)。30 日より古い DM は取得手段がない。
+- **本表の Tier 別レート制限は目安値**: X API docs の公式値が tier ごとに明示されていないため、コミュニティ報告と本プロジェクトの実機検証に基づく概算。正確な値は X Developer Portal で自身の tier の rate-limit を確認すること。
 - **App 設定の OAuth 1.0a で Direct Messages の read permission** が必要 (デフォルトの Read のみでは不十分。X Developer Portal で User authentication settings から有効化)。
 
 CLI 設計上の判断 (M35):
