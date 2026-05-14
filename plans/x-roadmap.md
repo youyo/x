@@ -350,12 +350,13 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - 📄 詳細: [plans/x-m34-spaces-trends.md](./x-m34-spaces-trends.md)
 - 留意 (M34 検証結果): SearchSpaces は X API がページネーション非対応 (`docs.x.com` で検証済、`SpaceSearchOption` は将来の next_token 追加に備え独立型として確保)。Trends は 2 endpoint で `max_trends` / `personalized_trend.fields` というパラメータ名差分があり、`TrendWoeidOption` / `TrendPersonalOption` で型分離 (M34 D-4)。aggregator generics 化は M33 D-2 に続き継続見送り (M34 D-8、M35 で再評価)
 
-#### M35: DM Read (Pro 推奨) ⏳ 未着手
-- [ ] T1: `internal/xapi/dm.go` 新規 — `GetDMEvents` / `GetDMConversation` / `GetDMWithUser`
-- [ ] T2: `internal/cli/dm.go` 新規 — `dm list` / `dm conversation`
-- [ ] T3: `internal/cli/root.go` — `AddCommand(newDMCmd())`
-- [ ] T4 (検証 + Docs): test / `x dm list` 実機 (Pro 環境) / docs に Tier 制限明記 / CHANGELOG
+#### M35: DM Read (Pro 推奨) ✅ 完了
+- [x] T1: `internal/xapi/dm.go` 新規 — 4 関数 (`GetDMEvent` / `GetDMEvents` / `GetDMConversation` / `GetDMWithUser`) + 3 iterator + 2 Option 型分離 (Lookup / Paged) + DRY 共通 (fetchDMEventsPage / eachDMEventsPaged) + `Includes.Media` / `Media` DTO 追加 (advisor #1 反映)
+- [x] T2: `internal/cli/dm.go` 新規 — 4 サブコマンド (`dm list` / `get` / `conversation` / `with`) + `dmClient` interface + var-swap + `extractDMEventID` / `extractDMConversationID` + `validateEventTypes` (CSV ホワイトリスト case-sensitive) + dmEventsAggregator
+- [x] T3: `internal/cli/root.go` — `AddCommand(newDMCmd())` + TestRootHelpShowsDM
+- [x] T4 (検証 + Docs): test 38+ 新規 pass / lint 0 / vet 0 / `docs/x-api.md §1.8` + Rate Limit 表更新 (Pro 推奨明記) / spec §6 / README 英日 / CHANGELOG `[0.7.0]` 拡張
 - 📄 詳細: [plans/x-m35-dm-read.md](./x-m35-dm-read.md)
+- 留意 (M35 検証結果): Basic tier では DM 系のレート制限が約 1 req / 24h と極端に厳しく事実上使用不可。**Pro tier ($5,000/月) 以上を推奨**。取得可能なのは直近 30 日以内のイベントのみ。Includes 構造体に Media フィールドを追加したことで likes/timeline/list tweets/space tweets 等の `expansions=attachments.media_keys` も silent drop しなくなった (M35 D-5 net improvement)。aggregator generics 化は M36 で再評価 (M35 D-9)
 
 #### M36: MCP v2 Tools (CLI M29-M35 の薄いラッパー) ⏳ 未着手
 - [ ] `internal/mcp/tools_tweet.go` — get_tweet / get_tweets / get_liking_users / get_retweeted_by / get_quote_tweets

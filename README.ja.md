@@ -23,7 +23,7 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 | `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (ロングツイート) 既定取得 + `liked list --max-results 1..4` 自動補正 |
 | `v0.5.0` | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30、**Basic tier 以上必須**) + `x timeline tweets` / `mentions` / `home` (M31) |
 | `v0.6.0` (draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — Users Extended 9 endpoint (M32) + `x list get` / `tweets` / `members` / `owned` / `followed` / `memberships` / `pinned` — Lists 7 endpoint (M33) |
-| `v0.7.0` (本リリース、draft) | `x space get` / `by-ids` / `search` / `by-creator` / `tweets` — Spaces 5 endpoint (M34、**アクティブな Space のみ**) + `x trends get <woeid>` / `personal` — Trends 2 endpoint (M34) |
+| `v0.7.0` (本リリース、draft) | `x space get` / `by-ids` / `search` / `by-creator` / `tweets` — Spaces 5 endpoint (M34、**アクティブな Space のみ**) + `x trends get <woeid>` / `personal` — Trends 2 endpoint (M34) + `x dm list` / `get` / `conversation` / `with` — Direct Messages Read 4 endpoint (M35、**Pro tier 推奨**) |
 
 詳細仕様は [`docs/specs/x-spec.md`](docs/specs/x-spec.md) を参照。
 
@@ -58,6 +58,10 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 - **`x space tweets <ID|URL>`** — Space 内の Tweet を取得 (`--max-results 1..100`、`--all` で `pagination_token` 自動辿り、NDJSON ストリーミング) (v0.7.0)
 - **`x trends get <woeid>`** — WOEID 指定トレンド (Yahoo Where On Earth ID)。代表値: `1118370` (東京) / `23424856` (日本) / `1` (全世界)。X API パラメータ名は `max_trends` (1..50、`max_results` ではない) (v0.7.0)
 - **`x trends personal`** — 認証ユーザーのパーソナライズトレンド。X API が自動解決するため `--user-id` は未登録。X API パラメータ名は `personalized_trend.fields` (`trend.fields` ではない) (v0.7.0)
+- **`x dm list`** — 認証ユーザーの DM イベントを `GET /2/dm_events` で取得 (`--event-types MessageCreate,ParticipantsJoin,ParticipantsLeave`、`--max-results 1..100`、`--all` で `pagination_token` 自動辿り、NDJSON ストリーミング)。**Basic tier は ~1 req / 24h で事実上使用不可。Pro tier ($5,000/月) 以上を推奨。** 取得可能なのは直近 30 日以内のイベントのみ (v0.7.0)
+- **`x dm get <eventID>`** — 単一 DM イベントを `GET /2/dm_events/:event_id` で取得。eventID は 1..19 桁数値のみ (v0.7.0)
+- **`x dm conversation <conversationID>`** — 特定会話の DM イベントを `GET /2/dm_conversations/:id/dm_events` で取得。`<userA>-<userB>` (1on1) / `group:<id>` (グループ DM) いずれの形式も受ける (v0.7.0)
+- **`x dm with <ID|@username|URL>`** — 特定ユーザーとの 1on1 DM を取得。`@username` / X URL は `GetUserByUsername` で ID 解決 (v0.7.0)
 - **`x configure`** — 対話形式で XDG 準拠の設定 / 認証情報ファイルを生成
 - **`x mcp`** — Streamable HTTP MCP サーバーを起動 (Claude Code Routines / MCP クライアント接続用)
   - 3 種類の認証モード: `none` (ローカル開発専用) / `apikey` (Bearer token) / `idproxy` (OIDC + cookie session)

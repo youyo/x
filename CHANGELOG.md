@@ -7,8 +7,33 @@
 ## [0.7.0] - 2026-05-15 (draft)
 
 X API v2 の Spaces 系 5 エンドポイントと Trends 系 2 エンドポイントを `x space` / `x trends` サブコマンドとして CLI に追加する (M34)。Spaces はアクティブな Space (live/scheduled) のみ取得可能。SearchSpaces は X API がページネーション非対応のため `--all` を提供しない。Trends は 2 endpoint でパラメータ名 (`max_trends` / `personalized_trend.fields`) と返却フィールドが異なるため、xapi 層では Option 型を分離した。
+続いて Direct Messages Read エンドポイント群 (events list / lookup / conversation / with) を `x dm` サブコマンドとして追加した (M35)。Basic tier では DM 系のレート制限が極端に厳しい (約 1 req / 24h) ため **Pro tier 推奨**。取得可能なのは直近 30 日以内のイベントのみ。あわせて `expansions=attachments.media_keys` の silent drop を防ぐため `xapi.Includes` 構造体に `Media []Media` フィールドを追加した。
 
 ### Added
+
+#### `x dm` サブコマンド (M35)
+- `x dm list` — 認証ユーザーの DM イベント一覧 (`GET /2/dm_events`)。`--event-types MessageCreate,ParticipantsJoin,ParticipantsLeave` の CSV ホワイトリスト指定 (case-sensitive)、`--max-results 1..100`、`--all` で `pagination_token` 自動辿り、`--no-json` / `--ndjson` 対応
+- `x dm get <eventID>` — 単一 DM イベント (`GET /2/dm_events/:event_id`)。eventID は 1..19 桁数値のみ受ける
+- `x dm conversation <conversationID>` — 特定会話の DM イベント (`GET /2/dm_conversations/:id/dm_events`)。conversation ID は `<userA>-<userB>` (1on1) / `group:<id>` (グループ) / 数値の全バリアントを許容
+- `x dm with <ID|@username|URL>` — 特定ユーザーとの 1on1 DM (`GET /2/dm_conversations/with/:participant_id/dm_events`)。`@username` / X URL は `GetUserByUsername` で ID 解決
+- **重要 Tier 制約**: Basic tier ($100/月) では DM 系のレート制限が約 1 req / 24h と極端に厳しく事実上使用不可。**Pro tier ($5,000/月) 以上を推奨**。取得可能なのは直近 30 日以内のイベントのみ。X App の DM read permission が必要
+- `--user-id` フラグは X API 認証ユーザー固定のため非公開 (M35 D-14)
+
+#### `xapi` パッケージ拡張 (M35)
+- 4 新規 DM メソッド: `Client.GetDMEvents` / `GetDMEvent` / `GetDMConversation` / `GetDMWithUser`
+- 3 新規 DM iterator: `EachDMEventsPage` / `EachDMConversationPage` / `EachDMWithUserPage`
+- 2 新規 Option 型 (DM 用途別分離、M35 D-1):
+  - `DMLookupOption` — `WithDMLookupDMEventFields` / `WithDMLookupExpansions` / `WithDMLookupUserFields` / `WithDMLookupTweetFields` / `WithDMLookupMediaFields` (GetDMEvent 専用)
+  - `DMPagedOption` — `WithDMPagedMaxResults` / `WithDMPagedPaginationToken` / `WithDMPagedEventTypes` / 各種 fields + `WithDMPagedMaxPages` (paged 3 endpoint 共通)
+- 新規 DTO: `DMEvent` / `DMAttachments` / `DMEventResponse` (単一) / `DMEventsResponse` (配列)
+- `event_types` は CSV クエリ (`event_types=MessageCreate,ParticipantsJoin`) で送信、CLI 層でホワイトリスト検証 (M35 D-3 / D-4)
+- paged 3 endpoint はレスポンス型が完全一致するため、内部 `fetchDMEventsPage` + `eachDMEventsPaged` で DRY 化 (M35 D-2)
+
+#### `Includes.Media` の追加 (M35 D-5)
+- `internal/xapi/types.go` の `Includes` 構造体に `Media []Media` フィールドを追加 (advisor 反映、silent drop 防止)
+- 新規 `Media` DTO: `MediaKey` / `Type` / `URL` / `PreviewImageURL` / `DurationMs` / `Width` / `Height` / `AltText`
+- これにより likes / timeline / list tweets / space tweets / dm 等の `expansions=attachments.media_keys` + `media.fields=...` が機能するようになる (従来は Unmarshal で捨てられていた)
+- 既存 struct literal は名前付きフィールド初期化のため破壊的変更なし
 
 #### `x space` サブコマンド (M34)
 - `x space get <ID|URL>` — 単一 Space 取得 (`GET /2/spaces/:id`)。位置引数は英数字 ID または `https://(x|twitter).com/i/spaces/<ID>` URL を判別 (`extractSpaceID`)
