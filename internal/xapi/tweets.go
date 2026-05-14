@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // tweetLookupConfig は GetTweet / GetTweets のオプション集約構造体である。
@@ -537,4 +538,305 @@ func tweetLookupValues(cfg *tweetLookupConfig) url.Values {
 		values.Set("media.fields", strings.Join(cfg.mediaFields, ","))
 	}
 	return values
+}
+
+// -- SearchRecent / EachSearchPage (M30) -----------------------------------
+//
+// `GET /2/tweets/search/recent` を呼び出す (X API v2 Basic 以上必須、Free tier は 403)。
+// `EachSearchPage` は next_token を辿る rate-limit aware iterator で、M29 で抽出した
+// `(c *Client).computeInterPageWait(rl, threshold)` (pagination.go) を再利用する。
+
+// search.go 固有の定数群 (likes.go と並び)。
+const (
+	// searchDefaultMaxPages は WithSearchMaxPages 未指定時の上限ページ数である
+	// (spec §10 `--max-pages` (default: 50))。
+	searchDefaultMaxPages = 50
+	// searchRateLimitThreshold は EachSearchPage が rate-limit aware sleep を発動する
+	// remaining の閾値である (likes と同値 2、M30 D-6)。
+	searchRateLimitThreshold = 2
+)
+
+// SearchResponse は SearchRecent / EachSearchPage が返すレスポンス本体である。
+//
+// X API v2 `GET /2/tweets/search/recent` のレスポンス `{ data, includes, meta }` を構造化する。
+// Errors は M29 D-9 の TweetLookupError を再利用 (実発生はほぼ無いが将来互換、M30 D-7)。
+type SearchResponse struct {
+	// Data は検索でマッチしたツイートの配列。
+	Data []Tweet `json:"data,omitempty"`
+	// Includes は expansions で取得された関連リソース (users / tweets)。
+	Includes Includes `json:"includes,omitempty"`
+	// Meta は result_count / next_token を含むページネーション情報。
+	Meta Meta `json:"meta,omitempty"`
+	// Errors はバッチ/検索系の partial error (X API v2 仕様、実 search/recent では稀)。
+	Errors []TweetLookupError `json:"errors,omitempty"`
+}
+
+// SearchOption は SearchRecent / EachSearchPage の挙動を変更する関数オプションである。
+//
+// 同じキーで複数回呼ばれた場合は最後の呼び出しが勝つ (last-wins)。
+// 中間構造体 searchConfig に集約する設計は M29 D-8 と同パターン。
+type SearchOption func(*searchConfig)
+
+// searchConfig はオプション設定を集約する未公開構造体である。
+type searchConfig struct {
+	startTime       *time.Time
+	endTime         *time.Time
+	maxResults      int // 0 は no-op (X API デフォルトに任せる)
+	paginationToken string
+	tweetFields     []string
+	expansions      []string
+	userFields      []string
+	mediaFields     []string
+
+	// EachSearchPage 専用 (SearchRecent では無視される)。
+	maxPages int // 0 ならデフォルト searchDefaultMaxPages を使う
+}
+
+// WithSearchMaxResults は X API の max_results を設定する。
+//
+// X API v2 `search/recent` は 10..100 を要求する (10 未満は 400)。
+// 0 を渡すと no-op (X API デフォルト 10)。CLI 層 (M30) が下限補正を担う。
+func WithSearchMaxResults(n int) SearchOption {
+	return func(c *searchConfig) { c.maxResults = n }
+}
+
+// WithSearchStartTime は X API の start_time を RFC3339 (UTC, ナノ秒なし) で設定する。
+// search/recent は過去 7 日まで遡れる (それ以上前は X API が 400)。
+func WithSearchStartTime(t time.Time) SearchOption {
+	return func(c *searchConfig) {
+		tt := t
+		c.startTime = &tt
+	}
+}
+
+// WithSearchEndTime は X API の end_time を RFC3339 (UTC, ナノ秒なし) で設定する。
+func WithSearchEndTime(t time.Time) SearchOption {
+	return func(c *searchConfig) {
+		tt := t
+		c.endTime = &tt
+	}
+}
+
+// WithSearchPaginationToken は X API の pagination_token を設定する。
+// EachSearchPage は内部で next_token を都度上書きするため、初回ページのみ有効。
+func WithSearchPaginationToken(token string) SearchOption {
+	return func(c *searchConfig) { c.paginationToken = token }
+}
+
+// WithSearchTweetFields は X API の tweet.fields を設定する。空引数は no-op。
+func WithSearchTweetFields(fields ...string) SearchOption {
+	return func(c *searchConfig) {
+		if len(fields) == 0 {
+			return
+		}
+		c.tweetFields = append([]string(nil), fields...)
+	}
+}
+
+// WithSearchExpansions は X API の expansions を設定する。空引数は no-op。
+func WithSearchExpansions(exp ...string) SearchOption {
+	return func(c *searchConfig) {
+		if len(exp) == 0 {
+			return
+		}
+		c.expansions = append([]string(nil), exp...)
+	}
+}
+
+// WithSearchUserFields は X API の user.fields を設定する。空引数は no-op。
+func WithSearchUserFields(fields ...string) SearchOption {
+	return func(c *searchConfig) {
+		if len(fields) == 0 {
+			return
+		}
+		c.userFields = append([]string(nil), fields...)
+	}
+}
+
+// WithSearchMediaFields は X API の media.fields を設定する。空引数は no-op。
+func WithSearchMediaFields(fields ...string) SearchOption {
+	return func(c *searchConfig) {
+		if len(fields) == 0 {
+			return
+		}
+		c.mediaFields = append([]string(nil), fields...)
+	}
+}
+
+// WithSearchMaxPages は EachSearchPage の上限ページ数を設定する。
+// 未指定 (or 0 以下) の場合 default `searchDefaultMaxPages = 50`。
+// SearchRecent では本オプションは無視される。
+func WithSearchMaxPages(n int) SearchOption {
+	return func(c *searchConfig) { c.maxPages = n }
+}
+
+// SearchRecent は X API v2 `GET /2/tweets/search/recent` を呼び出し、
+// 過去 7 日のキーワード検索結果 (単一ページ) を返す。
+//
+// 認証は NewClient 時に渡した *config.Credentials の OAuth 1.0a 署名で行われる。
+// **Tier 要件**: X API v2 Basic 以上 (Free tier では 403 → ErrPermission → exit 4)。
+//
+// query は事前 trim 不要の生クエリ (X API 演算子 `from:` / `lang:` / `conversation_id:` 等)。
+// 空文字列は "query must be non-empty" エラーで拒否する (X API は 400 を返すが、
+// ネットワーク往復を避けるため事前バリデーション)。
+//
+// エラー分類は M6 Client.Do と同じ:
+//   - errors.Is(err, ErrAuthentication) → 401
+//   - errors.Is(err, ErrPermission)     → 403 (Free tier or scope 不足)
+//   - errors.Is(err, ErrNotFound)       → 404
+//   - errors.Is(err, ErrRateLimit)      → 429 リトライ枯渇
+//
+// レスポンスの JSON 形式: `{"data":[...],"includes":{...},"meta":{...}}`。
+// `data` 配列が型不一致 → decode エラー (リトライしない)。
+func (c *Client) SearchRecent(
+	ctx context.Context,
+	query string,
+	opts ...SearchOption,
+) (*SearchResponse, error) {
+	if query == "" {
+		return nil, fmt.Errorf("xapi: SearchRecent: query must be non-empty")
+	}
+	cfg := newSearchConfig(opts)
+	resp, err := c.fetchSearchPage(ctx, query, &cfg)
+	if err != nil {
+		return nil, err
+	}
+	return resp.body, nil
+}
+
+// EachSearchPage は X API v2 `GET /2/tweets/search/recent` を next_token が
+// 無くなるまで自動辿りし、各ページを fn に渡す (rate-limit aware ページネーション)。
+//
+// 終了条件 (いずれか早い方):
+//   - meta.next_token が空文字列 (= 最終ページ)
+//   - 取得済みページ数が WithSearchMaxPages (default 50) に到達 → 正常終了
+//   - fn が non-nil error を返す → そのエラーをそのまま返却
+//   - ctx が cancel された → ctx.Err() を返却
+//
+// ページ間 sleep:
+//   - レスポンスの x-rate-limit-remaining が searchRateLimitThreshold (= 2) 以下のとき
+//     x-rate-limit-reset まで sleep (最大 rateLimitMaxWait = 15 分)
+//   - reset が過去 (clock skew or stale) の場合は最小 200ms にフォールバック
+//   - それ以外は最小 200ms 待機 (バースト抑止)
+//
+// 共通ロジックは M29 の `(c *Client).computeInterPageWait` を再利用 (pagination.go)。
+func (c *Client) EachSearchPage(
+	ctx context.Context,
+	query string,
+	fn func(*SearchResponse) error,
+	opts ...SearchOption,
+) error {
+	if query == "" {
+		return fmt.Errorf("xapi: EachSearchPage: query must be non-empty")
+	}
+	cfg := newSearchConfig(opts)
+	maxPages := cfg.maxPages
+	if maxPages <= 0 {
+		maxPages = searchDefaultMaxPages
+	}
+
+	for page := 0; page < maxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		fetched, err := c.fetchSearchPage(ctx, query, &cfg)
+		if err != nil {
+			return err
+		}
+		if err := fn(fetched.body); err != nil {
+			return err
+		}
+		next := fetched.body.Meta.NextToken
+		if next == "" {
+			return nil
+		}
+		if page+1 >= maxPages {
+			return nil
+		}
+		wait := c.computeInterPageWait(fetched.rateLimit, searchRateLimitThreshold)
+		if err := c.sleep(ctx, wait); err != nil {
+			return err
+		}
+		cfg.paginationToken = next
+	}
+	return nil
+}
+
+// searchFetched は単一ページの取得結果である (本体 + rate-limit ヘッダ情報)。
+type searchFetched struct {
+	body      *SearchResponse
+	rateLimit RateLimitInfo
+}
+
+// fetchSearchPage は単一ページのリクエスト送出 + JSON デコードを行う。
+// SearchRecent と EachSearchPage の共通実装。
+func (c *Client) fetchSearchPage(
+	ctx context.Context,
+	query string,
+	cfg *searchConfig,
+) (*searchFetched, error) {
+	endpoint := buildSearchURL(c.BaseURL(), query, cfg)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("xapi: build SearchRecent request: %w", err)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("xapi: read SearchRecent response: %w", err)
+	}
+	out := &SearchResponse{}
+	if err := json.Unmarshal(body, out); err != nil {
+		return nil, fmt.Errorf("xapi: decode SearchRecent response: %w", err)
+	}
+	return &searchFetched{body: out, rateLimit: resp.RateLimit}, nil
+}
+
+// buildSearchURL は `GET /2/tweets/search/recent` の完全 URL を組み立てる。
+//
+// D-3: query は生のまま url.Values.Set し、url.Values.Encode() に任せる。
+// X API 演算子 (`from:` / `conversation_id:` / `lang:`) のコロンは `%3A` にエスケープ
+// されるが、X API は両表現を受け付ける想定 (v0.5.0 リリース前に実機 smoke test)。
+func buildSearchURL(baseURL, query string, cfg *searchConfig) string {
+	values := url.Values{}
+	values.Set("query", query)
+	if cfg.maxResults > 0 {
+		values.Set("max_results", strconv.Itoa(cfg.maxResults))
+	}
+	if cfg.startTime != nil {
+		values.Set("start_time", cfg.startTime.UTC().Format(time.RFC3339))
+	}
+	if cfg.endTime != nil {
+		values.Set("end_time", cfg.endTime.UTC().Format(time.RFC3339))
+	}
+	if cfg.paginationToken != "" {
+		values.Set("pagination_token", cfg.paginationToken)
+	}
+	if len(cfg.tweetFields) > 0 {
+		values.Set("tweet.fields", strings.Join(cfg.tweetFields, ","))
+	}
+	if len(cfg.expansions) > 0 {
+		values.Set("expansions", strings.Join(cfg.expansions, ","))
+	}
+	if len(cfg.userFields) > 0 {
+		values.Set("user.fields", strings.Join(cfg.userFields, ","))
+	}
+	if len(cfg.mediaFields) > 0 {
+		values.Set("media.fields", strings.Join(cfg.mediaFields, ","))
+	}
+	return baseURL + "/2/tweets/search/recent?" + values.Encode()
+}
+
+// newSearchConfig は opts を適用した searchConfig を返す。
+func newSearchConfig(opts []SearchOption) searchConfig {
+	cfg := searchConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg
 }

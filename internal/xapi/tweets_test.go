@@ -6,11 +6,15 @@ package xapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // -- GetTweet (single) -----------------------------------------------------
@@ -580,5 +584,437 @@ func TestGetTweets_QueryParams(t *testing.T) {
 	}
 	if got := gotQuery.Get("expansions"); got != "author_id" {
 		t.Errorf("expansions = %q", got)
+	}
+}
+
+// -- SearchRecent ----------------------------------------------------------
+
+// TestSearchRecent_HitsCorrectEndpoint は GET /2/tweets/search/recent の正しいパスを検証する。
+func TestSearchRecent_HitsCorrectEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var gotPath, gotMethod string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[],"meta":{"result_count":0}}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.SearchRecent(context.Background(), "from:youyo")
+	if err != nil {
+		t.Fatalf("SearchRecent: %v", err)
+	}
+	if gotPath != "/2/tweets/search/recent" {
+		t.Errorf("path = %q, want /2/tweets/search/recent", gotPath)
+	}
+	if gotMethod != http.MethodGet {
+		t.Errorf("method = %q, want GET", gotMethod)
+	}
+}
+
+// TestSearchRecent_QueryRequired は query="" を事前バリデーションで拒否することを検証する
+// (httptest 呼ばれない)。
+func TestSearchRecent_QueryRequired(t *testing.T) {
+	t.Parallel()
+
+	var called int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&called, 1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.SearchRecent(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error for empty query, got nil")
+	}
+	if !strings.Contains(err.Error(), "query must be non-empty") {
+		t.Errorf("error = %q, want substring 'query must be non-empty'", err.Error())
+	}
+	if atomic.LoadInt32(&called) != 0 {
+		t.Errorf("server should not be called for empty query")
+	}
+}
+
+// TestSearchRecent_QueryInURL は query パラメータがクエリに反映されることを検証する。
+// 値は r.URL.Query().Get で auto-decode され "from:youyo" が読めることを確認する (D-3)。
+func TestSearchRecent_QueryInURL(t *testing.T) {
+	t.Parallel()
+
+	var gotQueryParam, gotRawQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQueryParam = r.URL.Query().Get("query")
+		gotRawQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.SearchRecent(context.Background(), "from:youyo")
+	if err != nil {
+		t.Fatalf("SearchRecent: %v", err)
+	}
+	if gotQueryParam != "from:youyo" {
+		t.Errorf("query = %q, want from:youyo (auto-decoded)", gotQueryParam)
+	}
+	// D-3 wire-format pin: url.Values.Encode は `:` を `%3A` にエスケープする。
+	// この期待値は CLI が送出する実際のフォーマットを documentation する。
+	if !strings.Contains(gotRawQuery, "query=from%3Ayouyo") {
+		t.Errorf("RawQuery = %q, want substring 'query=from%%3Ayouyo'", gotRawQuery)
+	}
+}
+
+// TestSearchRecent_QueryOperators_ConversationID は conversation_id: 演算子も
+// 同様にエンコードされることを検証する (thread サブコマンドの基礎)。
+func TestSearchRecent_QueryOperators_ConversationID(t *testing.T) {
+	t.Parallel()
+
+	var gotRawQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRawQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	if _, err := c.SearchRecent(context.Background(), "conversation_id:1234567"); err != nil {
+		t.Fatalf("SearchRecent: %v", err)
+	}
+	if !strings.Contains(gotRawQuery, "query=conversation_id%3A1234567") {
+		t.Errorf("RawQuery = %q, want 'query=conversation_id%%3A1234567'", gotRawQuery)
+	}
+}
+
+// TestSearchRecent_MaxResultsInQuery は WithSearchMaxResults がクエリに反映されることを検証する。
+func TestSearchRecent_MaxResultsInQuery(t *testing.T) {
+	t.Parallel()
+
+	var gotMax string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMax = r.URL.Query().Get("max_results")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	if _, err := c.SearchRecent(context.Background(), "test", WithSearchMaxResults(10)); err != nil {
+		t.Fatalf("SearchRecent: %v", err)
+	}
+	if gotMax != "10" {
+		t.Errorf("max_results = %q, want 10", gotMax)
+	}
+}
+
+// TestSearchRecent_AllOptionsReflected は全 Option が URL クエリに反映されることを検証する。
+func TestSearchRecent_AllOptionsReflected(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	start := time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 5, 12, 23, 59, 59, 0, time.UTC)
+	_, err := c.SearchRecent(
+		context.Background(), "test",
+		WithSearchMaxResults(50),
+		WithSearchStartTime(start),
+		WithSearchEndTime(end),
+		WithSearchPaginationToken("PTOK"),
+		WithSearchTweetFields("id", "text", "conversation_id"),
+		WithSearchExpansions("author_id"),
+		WithSearchUserFields("username"),
+		WithSearchMediaFields("url"),
+	)
+	if err != nil {
+		t.Fatalf("SearchRecent: %v", err)
+	}
+	checks := map[string]string{
+		"max_results":      "50",
+		"start_time":       "2026-05-12T00:00:00Z",
+		"end_time":         "2026-05-12T23:59:59Z",
+		"pagination_token": "PTOK",
+		"tweet.fields":     "id,text,conversation_id",
+		"expansions":       "author_id",
+		"user.fields":      "username",
+		"media.fields":     "url",
+	}
+	for k, want := range checks {
+		if got := gotQuery.Get(k); got != want {
+			t.Errorf("query[%s] = %q, want %q", k, got, want)
+		}
+	}
+}
+
+// TestSearchRecent_StartTimeRFC3339Z は WithSearchStartTime のフォーマットを検証する (ナノ秒切り捨て)。
+func TestSearchRecent_StartTimeRFC3339Z(t *testing.T) {
+	t.Parallel()
+
+	var gotStart string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotStart = r.URL.Query().Get("start_time")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	start := time.Date(2026, 5, 12, 0, 0, 0, 999999999, time.UTC)
+	if _, err := c.SearchRecent(context.Background(), "test", WithSearchStartTime(start)); err != nil {
+		t.Fatalf("SearchRecent: %v", err)
+	}
+	if gotStart != "2026-05-12T00:00:00Z" {
+		t.Errorf("start_time = %q, want 2026-05-12T00:00:00Z (no nanoseconds)", gotStart)
+	}
+}
+
+// TestSearchRecent_401_AuthError は 401 で ErrAuthentication が返ることを検証する。
+func TestSearchRecent_401_AuthError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.SearchRecent(context.Background(), "test")
+	if !errors.Is(err, ErrAuthentication) {
+		t.Errorf("errors.Is(err, ErrAuthentication) = false (err=%v)", err)
+	}
+}
+
+// TestSearchRecent_403_Permission は 403 で ErrPermission が返ることを検証する (Free tier シナリオ)。
+func TestSearchRecent_403_Permission(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.SearchRecent(context.Background(), "test")
+	if !errors.Is(err, ErrPermission) {
+		t.Errorf("errors.Is(err, ErrPermission) = false (err=%v) — Free tier 403 シナリオ", err)
+	}
+}
+
+// TestSearchRecent_InvalidJSON_NoRetry は 200 + 型不一致 JSON で decode エラーが
+// 返り、リトライしないことを検証する。
+func TestSearchRecent_InvalidJSON_NoRetry(t *testing.T) {
+	t.Parallel()
+
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":"not-an-array"}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.SearchRecent(context.Background(), "test")
+	if err == nil {
+		t.Fatal("expected decode error")
+	}
+	if !strings.Contains(err.Error(), "decode") {
+		t.Errorf("error = %q, want substring 'decode'", err.Error())
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("server calls = %d, want 1 (no retry on decode error)", got)
+	}
+}
+
+// -- EachSearchPage --------------------------------------------------------
+
+// makeSearchPagedHandler は next_token で連鎖する複数 search ページのハンドラを返す。
+func makeSearchPagedHandler(t *testing.T, defs []pageDef) (handler http.HandlerFunc, tokensSeen *[]string, requestCounter *int32) {
+	t.Helper()
+	var seenTokens []string
+	var callCount int32
+	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idx := atomic.AddInt32(&callCount, 1) - 1
+		seenTokens = append(seenTokens, r.URL.Query().Get("pagination_token"))
+		if int(idx) >= len(defs) {
+			t.Errorf("server called more times (%d) than pages (%d)", idx+1, len(defs))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		def := defs[idx]
+		if def.rateLimit != nil {
+			w.Header().Set("x-rate-limit-limit", "60")
+			w.Header().Set("x-rate-limit-remaining", strconv.Itoa(def.rateLimit.remaining))
+			w.Header().Set("x-rate-limit-reset", strconv.FormatInt(def.rateLimit.resetUnix, 10))
+		}
+		var dataItems []string
+		for _, id := range def.tweetIDs {
+			dataItems = append(dataItems, fmt.Sprintf(`{"id":%q,"text":"t%s","author_id":"42"}`, id, id))
+		}
+		var nextToken string
+		if int(idx) < len(defs)-1 {
+			nextToken = fmt.Sprintf("P%d", idx+1)
+		}
+		body := fmt.Sprintf(`{"data":[%s],"meta":{"result_count":%d`,
+			strings.Join(dataItems, ","), len(def.tweetIDs))
+		if nextToken != "" {
+			body += fmt.Sprintf(`,"next_token":%q`, nextToken)
+		}
+		body += `}}`
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	})
+	return handler, &seenTokens, &callCount
+}
+
+// TestEachSearchPage_MultiPage_FullTraversal は 3 ページ走破を検証する。
+func TestEachSearchPage_MultiPage_FullTraversal(t *testing.T) {
+	t.Parallel()
+
+	defs := []pageDef{
+		{tweetIDs: []string{"1", "2"}},
+		{tweetIDs: []string{"3", "4"}},
+		{tweetIDs: []string{"5"}},
+	}
+	handler, tokensSeen, _ := makeSearchPagedHandler(t, defs)
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	var got []string
+	pageCount := 0
+	err := c.EachSearchPage(context.Background(), "test", func(p *SearchResponse) error {
+		pageCount++
+		for _, tw := range p.Data {
+			got = append(got, tw.ID)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("EachSearchPage: %v", err)
+	}
+	if pageCount != 3 {
+		t.Errorf("page count = %d, want 3", pageCount)
+	}
+	want := []string{"1", "2", "3", "4", "5"}
+	if len(got) != len(want) {
+		t.Fatalf("ids = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("ids[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	wantTokens := []string{"", "P1", "P2"}
+	if len(*tokensSeen) != len(wantTokens) {
+		t.Fatalf("tokens = %v, want %v", *tokensSeen, wantTokens)
+	}
+	for i, w := range wantTokens {
+		if (*tokensSeen)[i] != w {
+			t.Errorf("tokens[%d] = %q, want %q", i, (*tokensSeen)[i], w)
+		}
+	}
+}
+
+// TestEachSearchPage_MaxPages_Truncates は max_pages=2 で 2 ページに打ち切られることを検証する。
+func TestEachSearchPage_MaxPages_Truncates(t *testing.T) {
+	t.Parallel()
+
+	defs := []pageDef{
+		{tweetIDs: []string{"1"}},
+		{tweetIDs: []string{"2"}},
+		{tweetIDs: []string{"3"}}, // 呼ばれないはず
+	}
+	handler, _, calls := makeSearchPagedHandler(t, defs)
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	pageCount := 0
+	err := c.EachSearchPage(context.Background(), "test", func(_ *SearchResponse) error {
+		pageCount++
+		return nil
+	}, WithSearchMaxPages(2))
+	if err != nil {
+		t.Fatalf("EachSearchPage: %v", err)
+	}
+	if pageCount != 2 {
+		t.Errorf("callback count = %d, want 2", pageCount)
+	}
+	if got := atomic.LoadInt32(calls); got != 2 {
+		t.Errorf("server calls = %d, want 2", got)
+	}
+}
+
+// TestEachSearchPage_RateLimitSleep は rate-limit remaining が閾値以下のとき
+// reset まで sleep されることを検証する。
+func TestEachSearchPage_RateLimitSleep(t *testing.T) {
+	t.Parallel()
+
+	fixedNow := time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC)
+	resetAt := fixedNow.Add(5 * time.Second)
+	defs := []pageDef{
+		{tweetIDs: []string{"1"}, rateLimit: &struct {
+			remaining int
+			resetUnix int64
+		}{remaining: 1, resetUnix: resetAt.Unix()}},
+		{tweetIDs: []string{"2"}},
+	}
+	handler, _, _ := makeSearchPagedHandler(t, defs)
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	c, sleeps := newTestClient(t, srv, withNow(fixedTimeNow(fixedNow)))
+	err := c.EachSearchPage(context.Background(), "test", func(_ *SearchResponse) error { return nil })
+	if err != nil {
+		t.Fatalf("EachSearchPage: %v", err)
+	}
+	if len(*sleeps) != 1 {
+		t.Fatalf("sleep count = %d, want 1 (sleeps=%v)", len(*sleeps), *sleeps)
+	}
+	diff := (*sleeps)[0] - 5*time.Second
+	if diff < -time.Second || diff > time.Second {
+		t.Errorf("sleep[0] = %v, want ≈ 5s", (*sleeps)[0])
+	}
+}
+
+// TestEachSearchPage_InterPageDelay は rate-limit に余裕がある場合 200ms 待機を検証する。
+func TestEachSearchPage_InterPageDelay(t *testing.T) {
+	t.Parallel()
+
+	defs := []pageDef{
+		{tweetIDs: []string{"1"}, rateLimit: &struct {
+			remaining int
+			resetUnix int64
+		}{remaining: 50, resetUnix: time.Now().Add(900 * time.Second).Unix()}},
+		{tweetIDs: []string{"2"}},
+	}
+	handler, _, _ := makeSearchPagedHandler(t, defs)
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	c, sleeps := newTestClient(t, srv)
+	err := c.EachSearchPage(context.Background(), "test", func(_ *SearchResponse) error { return nil })
+	if err != nil {
+		t.Fatalf("EachSearchPage: %v", err)
+	}
+	if len(*sleeps) != 1 {
+		t.Fatalf("sleep count = %d, want 1 (sleeps=%v)", len(*sleeps), *sleeps)
+	}
+	if (*sleeps)[0] != 200*time.Millisecond {
+		t.Errorf("sleep[0] = %v, want 200ms", (*sleeps)[0])
 	}
 }
