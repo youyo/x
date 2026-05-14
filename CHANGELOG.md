@@ -6,9 +6,24 @@
 
 ## [0.5.0] - 2026-05-14 (draft)
 
-X API v2 の `search/recent` エンドポイントを CLI に追加し、過去 7 日間のキーワード検索とスレッド (会話) 取得をサポートする (M30)。`search/recent` は **X API v2 Basic tier 以上** が必要で、Free tier では `403` (`exit 4`) が返る。
+X API v2 の `search/recent` エンドポイントを CLI に追加し、過去 7 日間のキーワード検索とスレッド (会話) 取得をサポートする (M30)。さらに User Timelines 3 エンドポイント (ユーザーの Post / メンション / 認証ユーザーのホーム) を `x timeline` サブコマンドとして追加した (M31)。`search/recent` は **X API v2 Basic tier 以上** が必要で、Free tier では `403` (`exit 4`) が返る。User Timelines は Free tier でも利用可能。
 
 ### Added
+
+#### `x timeline` サブコマンド (M31)
+- `x timeline tweets [<ID>]` — ユーザーの Post タイムライン (`GET /2/users/:id/tweets`)。`--user-id` 省略時は self (`GetUserMe`)、`--exclude retweets,replies` 対応
+- `x timeline mentions [<ID>]` — ユーザーへのメンション (`GET /2/users/:id/mentions`)。`--user-id` 省略時は self。**`--exclude` は X API 仕様で非サポートのためフラグ自体を非登録** (M31 D-9)
+- `x timeline home` — 認証ユーザーのホームタイムライン (`GET /2/users/:id/timelines/reverse_chronological`)。X API 仕様で認証ユーザー固定のため **`--user-id` フラグは非登録**、`GetUserMe` で self を必ず解決する (M31 D-4)
+- 共通フラグ: `--max-results` (`tweets`/`mentions` は 5..100 下限補正、`home` は 1..100 そのまま)、時間窓 (`--yesterday-jst` / `--since-jst` / `--start-time` / `--end-time` の優先順位 liked と同形)、`--since-id` / `--until-id` (時間窓と独立、X API 仕様で併用可)、`--all` + `--max-pages` (default 50)、`--no-json` / `--ndjson` (排他)、`--tweet-fields` / `--expansions` / `--user-fields` / `--media-fields`
+- `tweets` / `mentions` の `--max-results 1..4` は X API 下限 (5) に補正して `[:n]` で truncate。`--all` 併用時は `ErrInvalidArgument` (exit 2) で拒否
+
+#### `xapi` パッケージ拡張 (M31)
+- 新規ファイル `internal/xapi/timeline.go`
+- 新規 DTO: `TimelineResponse` (Data / Includes / Meta)
+- 新規メソッド: `Client.GetUserTweets` / `GetUserMentions` / `GetHomeTimeline` + `EachUserTweetsPage` / `EachUserMentionsPage` / `EachHomeTimelinePage`
+- 新規 Option: `TimelineOption` (`WithTimelineMaxResults` / `WithTimelineStartTime` / `WithTimelineEndTime` / `WithTimelineSinceID` / `WithTimelineUntilID` / `WithTimelinePaginationToken` / `WithTimelineExclude` / `WithTimelineTweetFields` / `WithTimelineExpansions` / `WithTimelineUserFields` / `WithTimelineMediaFields` / `WithTimelineMaxPages`)
+- M29 で抽出した `computeInterPageWait(rl, threshold)` を `Each*TimelinePage` でも再利用 (timeline threshold = 2、likes / search と同値)
+- `WithTimelineExclude` は `tweets` / `home` のみ有効。`mentions` で渡すと X API が 400 を返す可能性があるため godoc で明示
 
 #### `x tweet search` (M30)
 - `x tweet search <query>` — X API v2 `GET /2/tweets/search/recent` のラッパ
@@ -37,6 +52,8 @@ X API v2 の `search/recent` エンドポイントを CLI に追加し、過去 
 - v0.4.0 以前の CLI / MCP 機能は完全後方互換
 - 設定ファイル `config.toml` への変更なし
 - `search/recent` は **Basic tier 以上必須** で、Free tier では使用不可 (`docs/x-api.md` 参照)
+- User Timelines 3 エンドポイントは Free tier でも利用可能 (M31)
+- `x timeline home` は OAuth 1.0a 必須 (本リポジトリは OAuth 1.0a 専用のため制約に該当しない)
 
 ## [0.4.0] - 2026-05-14
 

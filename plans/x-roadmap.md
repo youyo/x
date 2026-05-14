@@ -30,8 +30,8 @@ M28 までの全 28 マイルストーンが完了 (v0.3.0 リリース準備完
 **Phase I 優先順**:
 1. **M29**: Posts Lookup + Note Tweet + Social Signals (v0.4.0) ✅ 完了
 2. **M30**: Search Recent + Thread コマンド (v0.5.0) ✅ 完了
-3. **M31**: User Timelines (v0.5.0) ← 次の着手対象
-4. **M32**: Users Extended (v0.6.0)
+3. **M31**: User Timelines (v0.5.0) ✅ 完了
+4. **M32**: Users Extended (v0.6.0) ← 次の着手対象
 5. **M33**: Lists (v0.6.0)
 6. **M34**: Spaces + Trends (v0.7.0)
 7. **M35**: DM Read (v0.7.0、Pro 推奨)
@@ -319,11 +319,11 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - [x] T4 (検証 + Docs): test/lint/vet 全 pass / `docs/x-api.md` 1.3 節 (Tier・期間・下限・conversation_id 演算子) / Rate Limit 表更新 / `README` 英日 / `CHANGELOG.md [0.5.0]` draft 追記
 - 📄 詳細: [plans/x-m30-search-thread.md](./x-m30-search-thread.md)
 
-#### M31: User Timelines ⏳ 未着手
-- [ ] T1: `internal/xapi/timeline.go` 新規 — `GetUserTweets` / `GetUserMentions` / `GetHomeTimeline` + `EachTimelinePage`
-- [ ] T2: `internal/cli/timeline.go` 新規 — `timeline tweets` / `timeline mentions` / `timeline home`
-- [ ] T3: `internal/cli/root.go` — `AddCommand(newTimelineCmd())`
-- [ ] T4 (検証 + Docs): test / `x timeline tweets <ID>` / `x timeline home --since-jst` 実機 / CHANGELOG
+#### M31: User Timelines ✅ 完了
+- [x] T1: `internal/xapi/timeline.go` 新規 — `GetUserTweets` / `GetUserMentions` / `GetHomeTimeline` + `Each*TimelinePage` (3 関数分離 D-3)
+- [x] T2: `internal/cli/timeline.go` 新規 — `timeline tweets` / `timeline mentions` / `timeline home`、新規 `timelineClient` interface (D-12)、3 つ目の aggregator `timelineAggregator` (D-2、M33 で generics 化再評価)
+- [x] T3: `internal/cli/root.go` — `AddCommand(newTimelineCmd())` + TestRootHelpShowsTimeline
+- [x] T4 (検証 + Docs): test 34 新規ケース pass / lint 0 / vet 0 / `docs/x-api.md` (max_results 非対称 + exclude 差分 + Rate Limit 表) / spec §6 / README 英日 / CHANGELOG `[0.5.0]` 拡張
 - 📄 詳細: [plans/x-m31-timelines.md](./x-m31-timelines.md)
 
 #### M32: Users Extended ⏳ 未着手
