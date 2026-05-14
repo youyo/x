@@ -14,7 +14,7 @@
 #   - packages: write   ghcr.io へのイメージ push に必要
 #
 # 設計判断 (logvalet 流):
-#   - Homebrew tap への push は GitHub App token を tibdex/github-app-token で動的生成。
+#   - Homebrew tap への push は GitHub App token を actions/create-github-app-token で動的生成。
 #     PAT より権限が絞れ、有効期限も短い (1 時間)。
 #   - すべての action は SHA pin (Dependabot/pinact による更新前提、supply chain 対策)。
 #   - docker/setup-qemu + setup-buildx は .goreleaser.yaml の dockers が
@@ -48,13 +48,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Set up QEMU (multi-arch docker)
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Login to ghcr.io
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -62,10 +62,10 @@ jobs:
 
       - name: Generate GitHub App token
         id: app-token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app_id: ${{ secrets.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@1a80836c5c9d9e5755a25cb59ec6f45a3b5f41a8 # v7.2.1
