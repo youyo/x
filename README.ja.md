@@ -31,6 +31,10 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
   - `--all` モードで `next_token` を自動辿り (rate-limit aware: `x-rate-limit-remaining` / `x-rate-limit-reset` ヘッダ追従)
   - NDJSON ストリーミング出力 (`--ndjson`) — 他ツールへのパイプ向け
   - `tweet.fields` / `expansions` / `user.fields` のカスタマイズ
+  - `note_tweet` (ロングツイートの完全本文) を既定で取得し、`--no-json` 時に truncated text より優先表示
+  - `--max-results 1..4` を指定すると X API 下限 (5) を投げて応答を slice (v0.4.0)
+- **`x tweet get [ID|URL]` / `x tweet get --ids ID1,ID2,...`** — ツイートを ID または X の URL から取得、または最大 100 件まで一括取得 (v0.4.0)
+- **`x tweet liking-users` / `x tweet retweeted-by` / `x tweet quote-tweets`** — Social Signals (いいね・RT・引用) の確認 (v0.4.0)
 - **`x configure`** — 対話形式で XDG 準拠の設定 / 認証情報ファイルを生成
 - **`x mcp`** — Streamable HTTP MCP サーバーを起動 (Claude Code Routines / MCP クライアント接続用)
   - 3 種類の認証モード: `none` (ローカル開発専用) / `apikey` (Bearer token) / `idproxy` (OIDC + cookie session)

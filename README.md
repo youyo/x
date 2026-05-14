@@ -31,6 +31,10 @@ See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specific
   - `--all` mode auto-follows `next_token` with rate-limit aware sleep (respects `x-rate-limit-remaining` / `x-rate-limit-reset`)
   - NDJSON streaming (`--ndjson`) for piping into other tools
   - Customizable `tweet.fields` / `expansions` / `user.fields`
+  - `note_tweet` (long-form tweet body) fetched by default; `--no-json` prefers it over the truncated text
+  - `--max-results 1..4` is normalised to the X API minimum (5) and the response is sliced (v0.4.0)
+- **`x tweet get [ID|URL]` / `x tweet get --ids ID1,ID2,...`** — Look up a tweet by ID or X URL, or batch up to 100 IDs (v0.4.0)
+- **`x tweet liking-users` / `x tweet retweeted-by` / `x tweet quote-tweets`** — Social signals for a tweet (v0.4.0)
 - **`x configure`** — Interactive setup of XDG-compliant config + credentials files
 - **`x mcp`** — Start a Streamable HTTP MCP server (Claude Code Routines / MCP client connectivity)
   - Three auth modes: `none` (local dev only), `apikey` (Bearer token), `idproxy` (OIDC + cookie session)

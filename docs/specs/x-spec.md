@@ -175,15 +175,43 @@ x liked list
   --start-time <RFC3339>    (UTC)
   --end-time <RFC3339>      (UTC)
   --max-results <1-100>     (default: 100)
+                            (M29: 1..4 のとき X API には 5 を投げて応答を [:n] に絞る。
+                             --all との併用は ErrInvalidArgument で拒否)
   --pagination-token <s>    (オプション: 続きから取得)
   --all                     (next_token を自動辿って全件取得)
   --max-pages <int>         (--all 時の最大ページ数, default: 50)
-  --tweet-fields <csv>      (default: id,text,author_id,created_at,entities,public_metrics)
+  --tweet-fields <csv>      (default: id,text,author_id,created_at,entities,public_metrics,note_tweet)
   --expansions <csv>        (default: author_id)
   --user-fields <csv>       (default: username,name)
   --json                    (NDJSON 出力)
   --since-jst <YYYY-MM-DD>  (簡易: 指定日 JST 0:00〜23:59 を UTC 変換)
   --yesterday-jst           (簡易: JST 前日)
+  ※ --no-json 出力時、note_tweet.text が非空なら truncated text より優先表示する (M29)
+
+x tweet get [ID|URL]
+  --ids <csv>               (1..100 件のバッチ取得、引数と排他)
+  --tweet-fields <csv>      (default: id,text,author_id,created_at,entities,public_metrics,note_tweet,conversation_id)
+  --expansions <csv>        (default: author_id)
+  --user-fields <csv>       (default: username,name)
+  --media-fields <csv>      (default: 空)
+  --no-json                 (1 ツイート 1 行 / note_tweet.text 優先表示)
+  ※ URL/数値 ID どちらも受理。partial error は --no-json 時 stderr に warning
+
+x tweet liking-users <ID|URL>
+  --max-results <1-100>     (default: 100)
+  --pagination-token <s>
+  --user-fields <csv>       (default: username,name)
+  --expansions <csv>        / --tweet-fields <csv>
+  --no-json                 (1 ユーザー 1 行)
+
+x tweet retweeted-by <ID|URL>
+  (liking-users と同じフラグ)
+
+x tweet quote-tweets <ID|URL>
+  --max-results <1-100>     (default: 100)
+  --pagination-token <s>
+  --exclude <csv>           (retweets / replies)
+  --tweet-fields / --expansions / --user-fields / --media-fields / --no-json
 
 x mcp
   --host <addr>             (default: 127.0.0.1, Lambda は 0.0.0.0)

@@ -18,23 +18,29 @@
 | 制約 | TDD 必須 / Go 1.26.x / mark3labs/mcp-go / **cobra (kong から変更)** / idproxy 4 store / OSS 公開 |
 | 対象リポジトリ | `/Users/youyo/src/github.com/youyo/x` |
 | 作成日 | 2026-05-12 |
-| 最終更新 | 2026-05-12 (M28 完了) |
-| ステータス | ✅ 完了 (全 28 マイルストーン) |
+| 最終更新 | 2026-05-14 (M29-M36 追加キューイング) |
+| ステータス | 🚧 v0.4.0 開発完了 (M29) / v0.5.0〜v0.8.0 計画中 |
 | スペック | `docs/specs/x-spec.md` (v1.0.0 Approved) |
-| マイルストーン総数 | 28 (細粒度方針) |
+| マイルストーン総数 | 36 (M29-M36 追加、細粒度方針) |
 
 ## Current Focus
 
-全 28 マイルストーン完了。v0.3.0 の文書セット (`docs/x-api.md` + `docs/routine-prompt.md` + `CHANGELOG.md` + README 英日) を整備済み。
+M28 までの全 28 マイルストーンが完了 (v0.3.0 リリース準備完了)。次フェーズとして **readonly API 包括サポート (M29-M36)** を計画中。
 
-残タスクは **ユーザー手動による** 以下のみ:
+**Phase I 優先順**:
+1. **M29**: Posts Lookup + Note Tweet + Social Signals (v0.4.0) ✅ 完了
+2. **M30**: Search Recent + Thread コマンド (v0.5.0) ← 次の着手対象
+3. **M31**: User Timelines (v0.5.0)
+4. **M32**: Users Extended (v0.6.0)
+5. **M33**: Lists (v0.6.0)
+6. **M34**: Spaces + Trends (v0.7.0)
+7. **M35**: DM Read (v0.7.0、Pro 推奨)
+8. **M36**: MCP v2 Tools (v0.8.0、CLI M29-M35 全完了後)
 
+**残タスク (ユーザー手動)**:
 1. GitHub remote (`https://github.com/youyo/x`) 設定 + repository secrets (`HOMEBREW_TAP_GITHUB_TOKEN`) 登録
 2. `git push origin main`
-3. `git tag -a v0.1.0 -m "..." && git push origin v0.1.0` (任意、過去分)
-4. `git tag -a v0.2.0 -m "..." && git push origin v0.2.0` (任意、過去分)
-5. `git tag -a v0.3.0 -m "v0.3.0: lambroll サンプル + docs (Routines 連携準備)" && git push origin v0.3.0`
-6. GitHub Actions `release.yml` 完走確認 (`gh run watch`) / `brew install youyo/tap/x` 動作確認
+3. v0.1.0 / v0.2.0 / v0.3.0 タグ push + Actions 完走確認 (任意)
 
 ## Spec Update Required (本ロードマップ作成時の確定追加事項)
 
@@ -290,6 +296,74 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - [ ] `v0.3.0` タグ作成 ← **GitHub remote 設定後にユーザー手動で実施 (本マイルストーンでは扱わない)**
 - 完了: docs から Routines 設定が完結できる粒度、全 28 マイルストーン達成
 
+### Phase I: readonly API 包括サポート (v0.4.0〜v0.8.0)
+
+> 除外: Streaming 系 (1 ショット CLI 設計と非整合) / OAuth 2.0 PKCE 専用 (Bookmarks 等) / Bearer Token 必須 (search/all / counts 系) / Enterprise 専用 (compliance / activity / webhooks)
+> OAuth 1.0a User Context で利用可能な readonly エンドポイント約 35 件を 8 M に分割。
+
+#### M29: Posts Lookup / Social Signals + Note Tweet 既定 + liked 下限補正 ✅ 完了
+- [x] T1: `internal/xapi/types.go` — `Tweet.NoteTweet *NoteTweet` / `Tweet.ConversationID string` / `NoteTweet` 型追加
+- [x] T2: `internal/xapi/tweets.go` 新規 — `GetTweet` / `GetTweets` + `TweetLookupOption` 群 + `TweetLookupError`
+- [x] T3: `internal/xapi/tweets.go` 拡張 — `GetLikingUsers` / `GetRetweetedBy` / `GetQuoteTweets`
+- [x] T4: `internal/cli/tweet.go` 新規 — `tweet get` (URL→ID 自動変換) / `tweet liking-users` / `tweet retweeted-by` / `tweet quote-tweets`
+- [x] T5: `internal/cli/root.go` — `AddCommand(newTweetCmd())` + TestRootHelpShowsTweet
+- [x] T6: `internal/cli/liked.go` 改修 — `note_tweet` 既定追加 / `--max-results<5` 補正 / `--all` × 1..4 拒否 / `writeLikedHuman` note_tweet 優先
+- [x] T7 (Refactor): `internal/xapi/pagination.go` — `computeInterPageWait` を共通化
+- [x] T8 (検証 + Docs): test/lint/vet 全 pass / spec §6 / docs/x-api.md / README 英日 / CHANGELOG [0.4.0] 追記
+- 📄 詳細: [plans/x-m29-posts-lookup.md](./x-m29-posts-lookup.md)
+
+#### M30: Search Recent + Thread コマンド ⏳ 未着手
+- [ ] T1: `internal/xapi/tweets.go` 拡張 — `SearchRecent` + `EachSearchPage` + `SearchOption` 群
+- [ ] T2: `internal/cli/tweet.go` 拡張 — `tweet search` (JST 系フラグ / --all / --ndjson)
+- [ ] T3: `internal/cli/tweet.go` 拡張 — `tweet thread` (--author-only, CLI 層 AuthorID フィルタ)
+- [ ] T4 (検証 + Docs): search/thread テスト / `x tweet search` / `x tweet thread --author-only` 実機 / docs/x-api.md Tier 要件 / CHANGELOG [0.5.0]
+- 📄 詳細: [plans/x-m30-search-thread.md](./x-m30-search-thread.md)
+
+#### M31: User Timelines ⏳ 未着手
+- [ ] T1: `internal/xapi/timeline.go` 新規 — `GetUserTweets` / `GetUserMentions` / `GetHomeTimeline` + `EachTimelinePage`
+- [ ] T2: `internal/cli/timeline.go` 新規 — `timeline tweets` / `timeline mentions` / `timeline home`
+- [ ] T3: `internal/cli/root.go` — `AddCommand(newTimelineCmd())`
+- [ ] T4 (検証 + Docs): test / `x timeline tweets <ID>` / `x timeline home --since-jst` 実機 / CHANGELOG
+- 📄 詳細: [plans/x-m31-timelines.md](./x-m31-timelines.md)
+
+#### M32: Users Extended ⏳ 未着手
+- [ ] T1: `internal/xapi/users.go` 拡張 — `GetUser` / `GetUsers` / `GetUserByUsername` / `GetUsersByUsernames` / `SearchUsers` / `GetFollowing` / `GetFollowers` / `GetBlocking` / `GetMuting` + `EachUserGraphPage`
+- [ ] T2: `internal/cli/user.go` 新規 — `user get` / `user followers` / `user following` / `user blocking` / `user muting` / `user search`
+- [ ] T3: `internal/cli/root.go` — `AddCommand(newUserCmd())`
+- [ ] T4 (検証 + Docs): test / `x user get @youyo` / `x user followers` 実機 / CHANGELOG
+- 📄 詳細: [plans/x-m32-users-extended.md](./x-m32-users-extended.md)
+
+#### M33: Lists ⏳ 未着手
+- [ ] T1: `internal/xapi/lists.go` 新規 — `GetList` / `GetListTweets` / `GetListMembers` / `GetOwnedLists` / `GetListMemberships` / `GetFollowedLists` / `GetPinnedLists`
+- [ ] T2: `internal/cli/list.go` 新規 — `list get` / `list tweets` / `list members` / `list owned` / `list followed` / `list memberships`
+- [ ] T3: `internal/cli/root.go` — `AddCommand(newListCmd())`
+- [ ] T4 (検証 + Docs): test / `x list tweets <ID>` / `x list owned` 実機 / CHANGELOG
+- 📄 詳細: [plans/x-m33-lists.md](./x-m33-lists.md)
+
+#### M34: Spaces + Trends ⏳ 未着手
+- [ ] T1: `internal/xapi/spaces.go` 新規 + `internal/xapi/trends.go` 新規
+- [ ] T2: `internal/cli/space.go` 新規 + `internal/cli/trends.go` 新規
+- [ ] T3: `internal/cli/root.go` — AddCommand × 2
+- [ ] T4 (検証 + Docs): test / `x space search "AI"` / `x trends get 1118370` 実機 / CHANGELOG
+- 📄 詳細: [plans/x-m34-spaces-trends.md](./x-m34-spaces-trends.md)
+
+#### M35: DM Read (Pro 推奨) ⏳ 未着手
+- [ ] T1: `internal/xapi/dm.go` 新規 — `GetDMEvents` / `GetDMConversation` / `GetDMWithUser`
+- [ ] T2: `internal/cli/dm.go` 新規 — `dm list` / `dm conversation`
+- [ ] T3: `internal/cli/root.go` — `AddCommand(newDMCmd())`
+- [ ] T4 (検証 + Docs): test / `x dm list` 実機 (Pro 環境) / docs に Tier 制限明記 / CHANGELOG
+- 📄 詳細: [plans/x-m35-dm-read.md](./x-m35-dm-read.md)
+
+#### M36: MCP v2 Tools (CLI M29-M35 の薄いラッパー) ⏳ 未着手
+- [ ] `internal/mcp/tools_tweet.go` — get_tweet / get_tweets / get_liking_users / get_retweeted_by / get_quote_tweets
+- [ ] `internal/mcp/tools_search.go` — search_recent_tweets / get_tweet_thread
+- [ ] `internal/mcp/tools_timeline.go` — get_user_tweets / get_user_mentions / get_home_timeline
+- [ ] `internal/mcp/tools_users.go` — get_user / get_user_by_username / get_user_following / get_user_followers
+- [ ] `internal/mcp/tools_lists.go` — get_list / get_list_tweets
+- [ ] `internal/mcp/tools_misc.go` — search_spaces / get_trends
+- [ ] test / docs/routine-prompt.md 更新 / CHANGELOG [0.8.0]
+- 📄 詳細: [plans/x-m36-mcp-v2-tools.md](./x-m36-mcp-v2-tools.md)
+
 ## Architecture Decisions (spec 引き継ぎ + 追加)
 
 | # | 決定 | 理由 | 日付 |
@@ -299,6 +373,7 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 | 12 | M2 で軽量 CI を先行整備、M14 で release.yml に拡張 | TDD 駆動で各 M を CI 守護する。release は v0.1.0 直前に切り出して責務分離 | 2026-05-12 |
 | 13 | M5-M8 で xapi を完成させてから M9-M12 で CLI を被せる | クライアントとプレゼンテーションの責務分離。`internal/xapi` のテスト容易性を最大化 | 2026-05-12 |
 | 14 | MCP コア (M15-M18) と認証 (M19-M23) を独立 Phase に分割 | tools 実装と middleware 実装の関心事を分離。M19 以降の各 store backend を TDD で独立検証 | 2026-05-12 |
+| 15 | readonly API の段階的サポート (M29-M36) | Full-archive search / Streaming / Bookmarks は OAuth 1.0a または 1 ショット CLI と非整合なため除外。MCP は CLI 全完了後の M36 で薄いラッパーとして一括追加。DM は Basic tier レート制限が厳しく Pro 推奨と明記 | 2026-05-14 |
 
 ## Risks (ロードマップ全体)
 
@@ -324,6 +399,7 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 | 2026-05-12 | spec 影響 | spec §11 の `STORE_BACKEND` 拡張 / sqlite redis 環境変数追加 / §3 フェーズ2展望 / §10 外部依存 / §5 architecture / ADR #11 追加 を ExitPlanMode 後に実施 |
 | 2026-05-12 | 変更 | CLI パーサを **kong → cobra** に変更 (ユーザー提案受諾)。理由: OSS デファクト + `__complete` 標準補完 + viper 統合 + ヘルプ/マンページ標準化。M1 詳細計画を Cobra ベースで全面刷新 (テストケース 30→21、LOC 800→530、completion.go 不要)。spec §10/§5 ADR #4 を ExitPlanMode 後に修正 |
 | 2026-05-12 | 完了 | M16-M28 を一括完了マーク化 (commit hash 追記)。全 28 マイルストーン達成、v0.3.0 文書セット (docs/x-api.md + docs/routine-prompt.md + CHANGELOG + README 英日) を整備済み。残タスクはユーザー手動の git push + タグ push のみ |
+| 2026-05-14 | 追加 | M29-M36 (readonly API 包括サポート) をキューイング — Posts Lookup+Social Signals / Search+Thread / Timelines / Users Extended / Lists / Spaces+Trends / DM Read / MCP v2 Tools の 8 段階。Streaming・Bookmarks・Bearer 専用・Enterprise 専用は除外。ADR #15 追加。 |
 
 ---
 

@@ -5,14 +5,47 @@
 
 ## 1. 概要
 
-X API v2 は X (旧 Twitter) が提供する公式 REST API。本リポジトリでは **OAuth 1.0a User Context** で以下 2 エンドポイントのみを利用する。
+X API v2 は X (旧 Twitter) が提供する公式 REST API。本リポジトリでは **OAuth 1.0a User Context** で以下のエンドポイントを利用する。
 
-| エンドポイント | 本リポでの用途 |
-|---|---|
-| `GET /2/users/me` | `x me` / MCP `get_user_me` ツール |
-| `GET /2/users/:id/liked_tweets` | `x liked list` / MCP `get_liked_tweets` ツール |
+| エンドポイント | 本リポでの用途 | 導入 |
+|---|---|---|
+| `GET /2/users/me` | `x me` / MCP `get_user_me` ツール | v0.1.0 |
+| `GET /2/users/:id/liked_tweets` | `x liked list` / MCP `get_liked_tweets` ツール | v0.1.0 |
+| `GET /2/tweets/:id` | `x tweet get <ID\|URL>` | v0.4.0 (M29) |
+| `GET /2/tweets?ids=...` | `x tweet get --ids ID1,ID2,...` (バッチ取得 1..100 件) | v0.4.0 (M29) |
+| `GET /2/tweets/:id/liking_users` | `x tweet liking-users` | v0.4.0 (M29) |
+| `GET /2/tweets/:id/retweeted_by` | `x tweet retweeted-by` | v0.4.0 (M29) |
+| `GET /2/tweets/:id/quote_tweets` | `x tweet quote-tweets` | v0.4.0 (M29) |
 
 その他のエンドポイント (post / search / filter stream など) は対象外。
+
+### 1.1 note_tweet (ロングツイート, 280 字超)
+
+`tweet.fields=note_tweet` を指定すると、ロングツイート (280 字超の投稿) のレスポンス
+`data` (または `includes.tweets`) に `note_tweet` オブジェクトが含まれる。スキーマ:
+
+```jsonc
+{
+  "note_tweet": {
+    "text": "<完全な本文 (truncate なし)>",
+    "entities": { "urls": [...], "hashtags": [...], "mentions": [...] }
+  }
+}
+```
+
+- 旧 280 字以内のツイートでは `note_tweet` 自体が返らない (CLI 上は `omitempty`)
+- M29 以降、`x liked list` および `x tweet get` は既定でこれを取得 (`note_tweet` を tweet.fields に含める)
+- `--no-json` 出力時は `note_tweet.text` が非空ならそれを 80 ルーン truncate 表示し、`tw.text` (短縮版) より優先する
+- JSON / NDJSON 出力は無変更 (note_tweet と text の両方を含む後方互換)
+
+### 1.2 `liked_tweets` の `max_results` 下限 (= 5)
+
+`GET /2/users/:id/liked_tweets` は `max_results` に 5 以上を要求する (4 以下は X API が 400 エラーを返す)。
+M29 から CLI `x liked list --max-results n` は次のように振る舞う:
+
+- **n=5..100**: そのまま X API に渡す
+- **n=1..4 かつ `--all=false`**: X API に 5 を投げて応答を `[:n]` で絞る
+- **n=1..4 かつ `--all=true`**: UX 混乱回避のため `ErrInvalidArgument` (exit 2) で拒否
 
 ## 2. アカウント取得と App 設定
 

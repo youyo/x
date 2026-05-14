@@ -37,7 +37,7 @@ const (
 var tweetURLPathRE = regexp.MustCompile(`/status(?:es)?/(\d+)`)
 
 // tweetNumericIDRE は引数全体が数値 ID 単独であるかを判定する正規表現である (D-1)。
-var tweetNumericIDRE = regexp.MustCompile(`^[0-9]+$`)
+var tweetNumericIDRE = regexp.MustCompile(`^\d+$`)
 
 // extractTweetID は引数文字列 (URL / 数値 ID) から Tweet ID を抽出する (D-1)。
 //
