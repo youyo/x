@@ -54,3 +54,52 @@ func TestServerName(t *testing.T) {
 		t.Errorf("ServerName = %q, want %q", mcpinternal.ServerName, "x")
 	}
 }
+
+// TestNewServer_RegistersAllTools は NewServer が全 20 ツール
+// (M17 / M18 既存 2 + M36 新規 18) を登録することを pin する (advisor 指摘)。
+//
+// 各ツールが MCP 仕様の `tools/list` で見えるよう ListTools() に名前が存在することを検証。
+func TestNewServer_RegistersAllTools(t *testing.T) {
+	t.Parallel()
+
+	want := []string{
+		// Existing (M17, M18)
+		"get_user_me",
+		"get_liked_tweets",
+		// M36 T1: tools_tweet.go
+		"get_tweet",
+		"get_tweets",
+		"get_liking_users",
+		"get_retweeted_by",
+		"get_quote_tweets",
+		// M36 T2: tools_search.go
+		"search_recent_tweets",
+		"get_tweet_thread",
+		// M36 T3: tools_timeline.go
+		"get_user_tweets",
+		"get_user_mentions",
+		"get_home_timeline",
+		// M36 T4: tools_users.go
+		"get_user",
+		"get_user_by_username",
+		"get_user_following",
+		"get_user_followers",
+		// M36 T5: tools_lists.go
+		"get_list",
+		"get_list_tweets",
+		// M36 T6: tools_misc.go
+		"search_spaces",
+		"get_trends",
+	}
+
+	s := mcpinternal.NewServer(nil, "test")
+	registered := s.ListTools()
+	if got := len(registered); got != len(want) {
+		t.Errorf("registered tool count = %d, want %d", got, len(want))
+	}
+	for _, name := range want {
+		if _, ok := registered[name]; !ok {
+			t.Errorf("tool %q is not registered", name)
+		}
+	}
+}
