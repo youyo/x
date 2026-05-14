@@ -31,5 +31,6 @@ func NewServer(client *xapi.Client, version string) *mcpserver.MCPServer {
 	registerToolLikes(s, client)
 	registerToolTweet(s, client)
 	registerToolSearch(s, client)
+	registerToolTimeline(s, client)
 	return s
 }
