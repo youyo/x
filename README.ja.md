@@ -19,7 +19,9 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 |---------|-------|
 | `v0.1.0` | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
 | `v0.2.0` | Remote MCP サーバー (`x mcp --auth idproxy\|apikey\|none`) と `get_user_me` / `get_liked_tweets` tools、加えて 4 種類の `idproxy` ストアバックエンド (memory / sqlite / redis / dynamodb) |
-| `v0.3.0` (本リリース) | `examples/lambroll/` AWS Lambda Function URL デプロイサンプル + Claude Code Routines プロンプト雛形 (`docs/routine-prompt.md`) + X API v2 リファレンス (`docs/x-api.md`) |
+| `v0.3.0` | `examples/lambroll/` AWS Lambda Function URL デプロイサンプル + Claude Code Routines プロンプト雛形 (`docs/routine-prompt.md`) + X API v2 リファレンス (`docs/x-api.md`) |
+| `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (ロングツイート) 既定取得 + `liked list --max-results 1..4` 自動補正 |
+| `v0.5.0` (本リリース、draft) | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30、**Basic tier 以上必須**) |
 
 詳細仕様は [`docs/specs/x-spec.md`](docs/specs/x-spec.md) を参照。
 
@@ -35,6 +37,8 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
   - `--max-results 1..4` を指定すると X API 下限 (5) を投げて応答を slice (v0.4.0)
 - **`x tweet get [ID|URL]` / `x tweet get --ids ID1,ID2,...`** — ツイートを ID または X の URL から取得、または最大 100 件まで一括取得 (v0.4.0)
 - **`x tweet liking-users` / `x tweet retweeted-by` / `x tweet quote-tweets`** — Social Signals (いいね・RT・引用) の確認 (v0.4.0)
+- **`x tweet search <query>`** — 過去 7 日間のキーワード検索 (`GET /2/tweets/search/recent`、**X API Basic tier 以上必須**)。X 検索演算子 (`from:` / `lang:` / `conversation_id:` 等) と JST 時刻フラグ・`--all` ページネーション・NDJSON ストリーミングをサポート (v0.5.0)
+- **`x tweet thread <ID|URL>`** — ツイートのスレッド (会話) 全体取得 (2 リクエスト: `GetTweet` + `search/recent` with `conversation_id`)。`--author-only` でルート作者の発言のみに絞り込み (v0.5.0)
 - **`x configure`** — 対話形式で XDG 準拠の設定 / 認証情報ファイルを生成
 - **`x mcp`** — Streamable HTTP MCP サーバーを起動 (Claude Code Routines / MCP クライアント接続用)
   - 3 種類の認証モード: `none` (ローカル開発専用) / `apikey` (Bearer token) / `idproxy` (OIDC + cookie session)

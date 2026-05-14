@@ -4,6 +4,40 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-14 (draft)
+
+X API v2 の `search/recent` エンドポイントを CLI に追加し、過去 7 日間のキーワード検索とスレッド (会話) 取得をサポートする (M30)。`search/recent` は **X API v2 Basic tier 以上** が必要で、Free tier では `403` (`exit 4`) が返る。
+
+### Added
+
+#### `x tweet search` (M30)
+- `x tweet search <query>` — X API v2 `GET /2/tweets/search/recent` のラッパ
+- `query` は X 検索演算子をそのまま受け付ける (`from:user` / `lang:ja` / `conversation_id:<id>` / `-is:retweet` 等)
+- 時間窓フラグ: `--start-time` / `--end-time` (RFC3339 UTC) と `--since-jst YYYY-MM-DD` / `--yesterday-jst` (liked list と同じ優先順位: yesterday-jst > since-jst > start/end)
+- ページネーション: `--all` + `--max-pages` (default 50) で next_token を自動辿る
+- 出力: 既定 JSON / `--no-json` (1 行/ツイート、note_tweet.text 優先) / `--ndjson` (line-delimited、`--all` 時はストリーミング)
+- `--max-results 1..9` は X API 下限 (10) に補正して応答を `[:n]` で truncate。`--all` 併用時は `ErrInvalidArgument` (exit 2) で拒否
+
+#### `x tweet thread` (M30)
+- `x tweet thread <ID|URL>` — ツイートのスレッド (会話) を取得
+- 内部動作 (2 リクエスト消費): `GetTweet(id)` で `conversation_id` を取得 → `SearchRecent(query="conversation_id:<convID>")` で構成ツイート取得
+- `--author-only` — ルートツイートの作者発言のみに絞る (CLI 層フィルタ)
+- 出力: 既定 JSON / `--no-json` / `--ndjson`。JSON / Human は `created_at` 昇順、NDJSON は X API 順 (新しい順) のままストリーミング
+- `--all` で複数ページ集約、`--max-pages` で上限制御
+
+#### `xapi` パッケージ拡張 (M30)
+- 新規 DTO: `SearchResponse` (Data / Includes / Meta / Errors)
+- 新規メソッド: `Client.SearchRecent`, `Client.EachSearchPage`
+- 新規 Option: `SearchOption` (`WithSearchMaxResults` / `WithSearchStartTime` / `WithSearchEndTime` / `WithSearchPaginationToken` / `WithSearchTweetFields` / `WithSearchExpansions` / `WithSearchUserFields` / `WithSearchMediaFields` / `WithSearchMaxPages`)
+- M29 で抽出した `computeInterPageWait(rl, threshold)` を `EachSearchPage` で再利用 (search 用 threshold = 2)
+- `TweetLookupError` を `SearchResponse.Errors` でも再利用 (partial error 互換)
+
+### Compatibility
+
+- v0.4.0 以前の CLI / MCP 機能は完全後方互換
+- 設定ファイル `config.toml` への変更なし
+- `search/recent` は **Basic tier 以上必須** で、Free tier では使用不可 (`docs/x-api.md` 参照)
+
 ## [0.4.0] - 2026-05-14
 
 X API v2 の Posts Lookup と Social Signals エンドポイントを CLI に追加し、Note Tweet (ロングツイート) を既定で取得・表示するように改修する (M29)。`x liked list --max-results 1..4` も X API の下限値 (5) を自動補正することで使い勝手を改善した。

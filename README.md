@@ -19,7 +19,9 @@ The design principle is **"CLI is the core, MCP is a thin wrapper"**. From `v0.3
 |---------|-------|
 | `v0.1.0` | CLI: `x version` / `x me` / `x liked list` / `x configure` / `x completion` |
 | `v0.2.0` | Remote MCP server (`x mcp --auth idproxy\|apikey\|none`) with `get_user_me` and `get_liked_tweets` tools, plus four `idproxy` store backends (memory / sqlite / redis / dynamodb) |
-| `v0.3.0` (this release) | `examples/lambroll/` AWS Lambda Function URL deployment sample + Claude Code Routines prompt template (`docs/routine-prompt.md`) + X API v2 reference (`docs/x-api.md`) |
+| `v0.3.0` | `examples/lambroll/` AWS Lambda Function URL deployment sample + Claude Code Routines prompt template (`docs/routine-prompt.md`) + X API v2 reference (`docs/x-api.md`) |
+| `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (long-form) default fetch + `--max-results 1..4` auto-correction for `liked list` |
+| `v0.5.0` (this release, draft) | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30, **Basic tier required**) |
 
 See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specification.
 
@@ -35,6 +37,8 @@ See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specific
   - `--max-results 1..4` is normalised to the X API minimum (5) and the response is sliced (v0.4.0)
 - **`x tweet get [ID|URL]` / `x tweet get --ids ID1,ID2,...`** — Look up a tweet by ID or X URL, or batch up to 100 IDs (v0.4.0)
 - **`x tweet liking-users` / `x tweet retweeted-by` / `x tweet quote-tweets`** — Social signals for a tweet (v0.4.0)
+- **`x tweet search <query>`** — Search recent tweets (past 7 days, **X API Basic tier required**) via `GET /2/tweets/search/recent`. Supports X search operators (`from:` / `lang:` / `conversation_id:` etc.), JST date helpers, `--all` pagination, and NDJSON streaming (v0.5.0)
+- **`x tweet thread <ID|URL>`** — Fetch a tweet's full conversation thread (2 API calls: `GetTweet` + `search/recent` with `conversation_id`). `--author-only` filters to the root author's posts (v0.5.0)
 - **`x configure`** — Interactive setup of XDG-compliant config + credentials files
 - **`x mcp`** — Start a Streamable HTTP MCP server (Claude Code Routines / MCP client connectivity)
   - Three auth modes: `none` (local dev only), `apikey` (Bearer token), `idproxy` (OIDC + cookie session)

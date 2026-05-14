@@ -213,6 +213,34 @@ x tweet quote-tweets <ID|URL>
   --exclude <csv>           (retweets / replies)
   --tweet-fields / --expansions / --user-fields / --media-fields / --no-json
 
+x tweet search <query>      ※ M30、X API v2 Basic tier 以上必須 (Free は 403 → exit 4)
+  --start-time <RFC3339>    (UTC、過去 7 日以内)
+  --end-time <RFC3339>
+  --since-jst <YYYY-MM-DD>  (JST 0:00-23:59 を UTC 変換、--start-time/--end-time より優先)
+  --yesterday-jst           (JST 前日、最も高優先)
+  --max-results <1-100>     (default: 100、1..9 は X API 下限 10 に補正して [:n] で slice)
+  --pagination-token <s>
+  --all                     (next_token 自動辿り、--max-results 1..9 とは併用不可)
+  --max-pages <int>         (--all 時の上限ページ数, default: 50)
+  --tweet-fields <csv>      (default: id,text,author_id,created_at,entities,public_metrics,note_tweet,conversation_id)
+  --expansions <csv>        (default: author_id)
+  --user-fields <csv>       (default: username,name)
+  --media-fields <csv>      (default: 空)
+  --no-json                 (1 ツイート 1 行 / note_tweet.text 優先表示)
+  --ndjson                  (1 ツイート 1 行 JSON、--all 時はストリーミング、--no-json と排他)
+  ※ query は X 検索演算子をサポート (from: / lang: / conversation_id: / -is:retweet 等)
+
+x tweet thread <ID|URL>     ※ M30、スレッド (会話) 全体取得 (2 リクエスト消費)
+  --author-only             (ルート author 以外を CLI 層でフィルタ)
+  --max-results <1-100>     (default: 100、search と同じ下限補正規則)
+  --pagination-token <s>
+  --all                     (next_token 自動辿り)
+  --max-pages <int>         (default: 50)
+  --tweet-fields / --expansions / --user-fields / --no-json / --ndjson
+  ※ 動作: GetTweet(id, tweet.fields=conversation_id) → SearchRecent(query=conversation_id:CONV)
+  ※ conversation_id 欠落時は plain error (exit 1)
+  ※ JSON / Human は created_at 昇順ソート、NDJSON は X API 順 (新しい順) のまま
+
 x mcp
   --host <addr>             (default: 127.0.0.1, Lambda は 0.0.0.0)
   --port <int>              (default: 8080)
