@@ -26,7 +26,7 @@ const (
 //
 //nolint:gochecknoglobals // 不変のスペック由来デフォルト値であり package level const slice の代替
 var (
-	likedDefaultTweetFields = []string{"id", "text", "author_id", "created_at", "entities", "public_metrics"}
+	likedDefaultTweetFields = []string{"id", "text", "author_id", "created_at", "entities", "public_metrics", "note_tweet"}
 	likedDefaultExpansions  = []string{"author_id"}
 	likedDefaultUserFields  = []string{"username", "name"}
 )
