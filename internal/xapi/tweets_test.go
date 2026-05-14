@@ -308,6 +308,252 @@ func TestGetTweets_TopLevelErrors(t *testing.T) {
 	}
 }
 
+// -- Social Signals --------------------------------------------------------
+
+// TestGetLikingUsers_HitsCorrectEndpoint は GET /2/tweets/:id/liking_users の正しいパスを検証する。
+func TestGetLikingUsers_HitsCorrectEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[],"meta":{"result_count":0}}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetLikingUsers(context.Background(), "100")
+	if err != nil {
+		t.Fatalf("GetLikingUsers: %v", err)
+	}
+	if gotPath != "/2/tweets/100/liking_users" {
+		t.Errorf("path = %q, want /2/tweets/100/liking_users", gotPath)
+	}
+}
+
+// TestGetLikingUsers_Success は data 配列・meta が読めることを確認する。
+func TestGetLikingUsers_Success(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"data":[
+				{"id":"7","username":"bob","name":"Bob"},
+				{"id":"8","username":"carol","name":"Carol"}
+			],
+			"meta":{"result_count":2,"next_token":"NEXTT"}
+		}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	resp, err := c.GetLikingUsers(context.Background(), "100")
+	if err != nil {
+		t.Fatalf("GetLikingUsers: %v", err)
+	}
+	if len(resp.Data) != 2 || resp.Data[0].Username != "bob" || resp.Data[1].Username != "carol" {
+		t.Errorf("Data = %+v", resp.Data)
+	}
+	if resp.Meta.ResultCount != 2 || resp.Meta.NextToken != "NEXTT" {
+		t.Errorf("Meta = %+v", resp.Meta)
+	}
+}
+
+// TestGetLikingUsers_QueryParams は max_results / pagination_token / user.fields 等が反映されることを検証する。
+func TestGetLikingUsers_QueryParams(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetLikingUsers(
+		context.Background(), "100",
+		WithUsersByTweetMaxResults(50),
+		WithUsersByTweetPaginationToken("PTOK"),
+		WithUsersByTweetUserFields("username", "name"),
+		WithUsersByTweetExpansions("pinned_tweet_id"),
+		WithUsersByTweetTweetFields("id", "text"),
+	)
+	if err != nil {
+		t.Fatalf("GetLikingUsers: %v", err)
+	}
+	if gotQuery.Get("max_results") != "50" {
+		t.Errorf("max_results = %q", gotQuery.Get("max_results"))
+	}
+	if gotQuery.Get("pagination_token") != "PTOK" {
+		t.Errorf("pagination_token = %q", gotQuery.Get("pagination_token"))
+	}
+	if gotQuery.Get("user.fields") != "username,name" {
+		t.Errorf("user.fields = %q", gotQuery.Get("user.fields"))
+	}
+	if gotQuery.Get("expansions") != "pinned_tweet_id" {
+		t.Errorf("expansions = %q", gotQuery.Get("expansions"))
+	}
+	if gotQuery.Get("tweet.fields") != "id,text" {
+		t.Errorf("tweet.fields = %q", gotQuery.Get("tweet.fields"))
+	}
+}
+
+// TestGetLikingUsers_401 は 401 → ErrAuthentication を確認する。
+func TestGetLikingUsers_401(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetLikingUsers(context.Background(), "100")
+	if !errors.Is(err, ErrAuthentication) {
+		t.Errorf("err = %v, want ErrAuthentication", err)
+	}
+}
+
+// TestGetRetweetedBy_HitsCorrectEndpoint は GET /2/tweets/:id/retweeted_by の正しいパスを検証する。
+func TestGetRetweetedBy_HitsCorrectEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetRetweetedBy(context.Background(), "100")
+	if err != nil {
+		t.Fatalf("GetRetweetedBy: %v", err)
+	}
+	if gotPath != "/2/tweets/100/retweeted_by" {
+		t.Errorf("path = %q, want /2/tweets/100/retweeted_by", gotPath)
+	}
+}
+
+// TestGetRetweetedBy_404 は 404 → ErrNotFound を確認する。
+func TestGetRetweetedBy_404(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetRetweetedBy(context.Background(), "100")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestGetQuoteTweets_HitsCorrectEndpoint は GET /2/tweets/:id/quote_tweets の正しいパスを検証する。
+func TestGetQuoteTweets_HitsCorrectEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetQuoteTweets(context.Background(), "100")
+	if err != nil {
+		t.Fatalf("GetQuoteTweets: %v", err)
+	}
+	if gotPath != "/2/tweets/100/quote_tweets" {
+		t.Errorf("path = %q, want /2/tweets/100/quote_tweets", gotPath)
+	}
+}
+
+// TestGetQuoteTweets_Success は data 配列・meta が読めることを確認する。
+func TestGetQuoteTweets_Success(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"data":[{"id":"200","text":"quote!","author_id":"9"}],
+			"includes":{"users":[{"id":"9","username":"dave","name":"Dave"}]},
+			"meta":{"result_count":1}
+		}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	resp, err := c.GetQuoteTweets(context.Background(), "100")
+	if err != nil {
+		t.Fatalf("GetQuoteTweets: %v", err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0].ID != "200" {
+		t.Errorf("Data = %+v", resp.Data)
+	}
+	if len(resp.Includes.Users) != 1 || resp.Includes.Users[0].Username != "dave" {
+		t.Errorf("Includes.Users = %+v", resp.Includes.Users)
+	}
+}
+
+// TestGetQuoteTweets_QueryParams は max_results / pagination_token / exclude / 各 fields が反映されることを確認する。
+func TestGetQuoteTweets_QueryParams(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	_, err := c.GetQuoteTweets(
+		context.Background(), "100",
+		WithQuoteTweetsMaxResults(20),
+		WithQuoteTweetsPaginationToken("QTOK"),
+		WithQuoteTweetsExclude("retweets", "replies"),
+		WithQuoteTweetsTweetFields("id", "text", "note_tweet"),
+		WithQuoteTweetsExpansions("author_id"),
+		WithQuoteTweetsUserFields("username", "name"),
+		WithQuoteTweetsMediaFields("type"),
+	)
+	if err != nil {
+		t.Fatalf("GetQuoteTweets: %v", err)
+	}
+	if gotQuery.Get("max_results") != "20" {
+		t.Errorf("max_results = %q", gotQuery.Get("max_results"))
+	}
+	if gotQuery.Get("pagination_token") != "QTOK" {
+		t.Errorf("pagination_token = %q", gotQuery.Get("pagination_token"))
+	}
+	if gotQuery.Get("exclude") != "retweets,replies" {
+		t.Errorf("exclude = %q", gotQuery.Get("exclude"))
+	}
+	if gotQuery.Get("tweet.fields") != "id,text,note_tweet" {
+		t.Errorf("tweet.fields = %q", gotQuery.Get("tweet.fields"))
+	}
+	if gotQuery.Get("expansions") != "author_id" {
+		t.Errorf("expansions = %q", gotQuery.Get("expansions"))
+	}
+	if gotQuery.Get("user.fields") != "username,name" {
+		t.Errorf("user.fields = %q", gotQuery.Get("user.fields"))
+	}
+	if gotQuery.Get("media.fields") != "type" {
+		t.Errorf("media.fields = %q", gotQuery.Get("media.fields"))
+	}
+}
+
 // TestGetTweets_QueryParams は Option クエリ反映を確認する。
 func TestGetTweets_QueryParams(t *testing.T) {
 	t.Parallel()
