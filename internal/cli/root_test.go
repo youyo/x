@@ -121,6 +121,44 @@ func TestRootHelpShowsList(t *testing.T) {
 	}
 }
 
+// TestRootHelpShowsSpace は `x --help` に space サブコマンドが表示されることを検証する (M34)。
+func TestRootHelpShowsSpace(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "space") {
+		t.Errorf("help output missing %q, got: %s", "space", out)
+	}
+}
+
+// TestRootHelpShowsTrends は `x --help` に trends サブコマンドが表示されることを検証する (M34)。
+func TestRootHelpShowsTrends(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "trends") {
+		t.Errorf("help output missing %q, got: %s", "trends", out)
+	}
+}
+
 // TestRootHelpShowsCompletion は `x --help` に Cobra 自動追加の completion サブコマンドが
 // 表示されることを検証する。
 func TestRootHelpShowsCompletion(t *testing.T) {
