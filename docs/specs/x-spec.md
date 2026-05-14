@@ -269,6 +269,37 @@ x timeline home             ※ M31、GET /2/users/:id/timelines/reverse_chronol
   --exclude <csv>           (retweets / replies)
   --tweet-fields / --expansions / --user-fields / --media-fields / --no-json / --ndjson
 
+x user get [<ID|@username|URL>]   ※ M32、GET /2/users/:id or /2/users/by/username/:username
+  --ids <csv>               (数値 ID 1..100、GET /2/users?ids=)
+  --usernames <csv>         (username 1..100、GET /2/users/by?usernames=)
+  ※ 位置引数 / --ids / --usernames は三者排他
+  --user-fields / --expansions / --tweet-fields / --no-json
+
+x user search <query>       ※ M32、GET /2/users/search
+  --max-results <1-1000>    (default: 100、X API 仕様 1..1000)
+  --pagination-token <s>    (X API クエリでは next_token にマップ)
+  --all                     (next_token 自動辿り)
+  --max-pages <int>         (default: 50)
+  --user-fields / --expansions / --tweet-fields / --no-json / --ndjson
+
+x user following [<ID|@username|URL>]   ※ M32、GET /2/users/:id/following
+  --user-id <id>            (default: 認証ユーザー、位置引数指定時は上書き)
+  ※ @username / URL 位置引数は GetUserByUsername で ID 解決後に呼び出し (2 API call)
+  --max-results <1-1000>    (default: 100)
+  --pagination-token <s>    / --all / --max-pages <int>
+  --user-fields / --expansions / --tweet-fields / --no-json / --ndjson
+
+x user followers [<ID|@username|URL>]   ※ M32、GET /2/users/:id/followers
+  (following と同じフラグセット)
+
+x user blocking             ※ M32、GET /2/users/:id/blocking (self only)
+  ※ X API 仕様で self のみ参照可能のため --user-id フラグは公開しない (GetUserMe で self 自動解決)
+  --max-results <1-1000>    / --pagination-token / --all / --max-pages
+  --user-fields / --expansions / --tweet-fields / --no-json / --ndjson
+
+x user muting               ※ M32、GET /2/users/:id/muting (self only)
+  (blocking と同じフラグセット、--user-id は同様に未公開)
+
 x mcp
   --host <addr>             (default: 127.0.0.1, Lambda は 0.0.0.0)
   --port <int>              (default: 8080)

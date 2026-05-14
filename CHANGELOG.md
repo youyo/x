@@ -4,6 +4,39 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-14 (draft)
+
+X API v2 の Users Extended エンドポイント群 (lookup / search / graph / blocking / muting) を `x user` サブコマンドとして CLI に追加する (M32)。9 endpoint をカバーし、`blocking` / `muting` は X API 仕様で self only のため、CLI 側で `--user-id` フラグ自体を公開しない設計とした。
+
+### Added
+
+#### `x user` サブコマンド (M32)
+- `x user get [<ID|@username|URL>]` — 単一ユーザー lookup。位置引数は ID/`@username`/URL を自動判別 (`extractUserRef`)
+- `x user get --ids <csv>` — 数値 ID バッチ lookup (1..100、`GET /2/users?ids=`)
+- `x user get --usernames <csv>` — username バッチ lookup (1..100、`GET /2/users/by?usernames=`)
+- `x user search <query>` — ユーザー検索 (`GET /2/users/search`)。`--max-results 1..1000` (X API docs 確認済)、`--all` で `next_token` 自動辿り
+- `x user following [<ID|@username|URL>]` / `x user followers [<ID|@username|URL>]` — フォロー / フォロワー一覧。`--user-id` 省略時は self (`GetUserMe`)、`@username`/URL 指定時は `GetUserByUsername` で ID 解決後に graph 呼び出し (2 API call)
+- `x user blocking` / `x user muting` — 自アカのブロック/ミュート一覧。X API 仕様で self only のため **`--user-id` フラグは非登録**、`GetUserMe` で self を必ず解決 (M32 D-5)
+- 共通フラグ: `--max-results` (search/graph 共に 1..1000)、`--pagination-token`、`--all` + `--max-pages` (default 50)、`--no-json` / `--ndjson` (排他)、`--user-fields` / `--expansions` / `--tweet-fields`
+- `--ids` / `--usernames` / 位置引数の三者排他 (M32 D-8)。複数指定は `ErrInvalidArgument` (exit 2)
+
+#### `xapi` パッケージ拡張 (M32)
+- 9 新規メソッド: `Client.GetUser` / `GetUsers` / `GetUserByUsername` / `GetUsersByUsernames` / `SearchUsers` / `GetFollowing` / `GetFollowers` / `GetBlocking` / `GetMuting`
+- 5 新規 iterator: `EachSearchUsersPage` / `EachFollowingPage` / `EachFollowersPage` / `EachBlockingPage` / `EachMutingPage`
+- 3 新規 Option 型 (用途別分離、M32 D-1):
+  - `UserLookupOption` — `WithUserLookupUserFields` / `WithUserLookupExpansions` / `WithUserLookupTweetFields`
+  - `UserSearchOption` — `WithUserSearchMaxResults` / `WithUserSearchNextToken` / `WithUserSearchUserFields` 等 (pagination キーは `next_token`、graph と異なる、M32 D-3)
+  - `UserGraphOption` — `WithUserGraphMaxResults` / `WithUserGraphPaginationToken` / `WithUserGraphUserFields` 等
+- 新規 DTO: `UserResponse` (単一) / `UsersResponse` (配列) / `UserLookupError` (partial error、`TweetLookupError` と同形だが別型)
+- M29 で抽出した `computeInterPageWait(rl, threshold)` を user search / graph iterator で再利用 (threshold=2、likes/search/timeline と同値)
+- graph 4 endpoint は `fetchUserGraphPage` / `eachUserGraphPage` で DRY、search は `fetchUserSearchPage` で別実装 (pagination パラメータ名の違いを吸収)
+
+### Compatibility
+
+- v0.5.0 以前の CLI / MCP 機能は完全後方互換
+- 設定ファイル `config.toml` への変更なし
+- `blocking` / `muting` は X API 仕様で OAuth 1.0a 認証ユーザーの self のみ参照可能 (本リポジトリは OAuth 1.0a 専用のため問題なし)
+
 ## [0.5.0] - 2026-05-14 (draft)
 
 X API v2 の `search/recent` エンドポイントを CLI に追加し、過去 7 日間のキーワード検索とスレッド (会話) 取得をサポートする (M30)。さらに User Timelines 3 エンドポイント (ユーザーの Post / メンション / 認証ユーザーのホーム) を `x timeline` サブコマンドとして追加した (M31)。`search/recent` は **X API v2 Basic tier 以上** が必要で、Free tier では `403` (`exit 4`) が返る。User Timelines は Free tier でも利用可能。

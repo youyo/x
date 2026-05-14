@@ -21,7 +21,8 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 | `v0.2.0` | Remote MCP サーバー (`x mcp --auth idproxy\|apikey\|none`) と `get_user_me` / `get_liked_tweets` tools、加えて 4 種類の `idproxy` ストアバックエンド (memory / sqlite / redis / dynamodb) |
 | `v0.3.0` | `examples/lambroll/` AWS Lambda Function URL デプロイサンプル + Claude Code Routines プロンプト雛形 (`docs/routine-prompt.md`) + X API v2 リファレンス (`docs/x-api.md`) |
 | `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (ロングツイート) 既定取得 + `liked list --max-results 1..4` 自動補正 |
-| `v0.5.0` (本リリース、draft) | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30、**Basic tier 以上必須**) + `x timeline tweets` / `mentions` / `home` (M31) |
+| `v0.5.0` | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30、**Basic tier 以上必須**) + `x timeline tweets` / `mentions` / `home` (M31) |
+| `v0.6.0` (本リリース、draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — Users Extended 9 endpoint (M32) |
 
 詳細仕様は [`docs/specs/x-spec.md`](docs/specs/x-spec.md) を参照。
 
@@ -42,6 +43,10 @@ X (旧 Twitter) API v2 を扱うための単一バイナリ Go 製 CLI。Claude 
 - **`x timeline tweets [<ID>]`** — ユーザーの Post タイムライン (`GET /2/users/:id/tweets`) を取得 (省略時は self)。`--exclude retweets,replies` 対応 (v0.5.0)
 - **`x timeline mentions [<ID>]`** — ユーザーへのメンション (`GET /2/users/:id/mentions`) を取得 (省略時は self)。X API は本エンドポイントで `exclude` をサポートしないため、フラグ自体を意図的に未登録 (v0.5.0)
 - **`x timeline home`** — 認証ユーザーのホームタイムライン (`GET /2/users/:id/timelines/reverse_chronological`)。X API 仕様で認証ユーザー固定のため `--user-id` フラグは意図的に未登録 (v0.5.0)
+- **`x user get [<ID|@username|URL>]` / `--ids` / `--usernames`** — ID / `@username` / X URL / バッチ (最大 100 件) でユーザーを取得。位置引数 / `--ids` / `--usernames` の三者排他 (v0.6.0)
+- **`x user search <query>`** — ユーザー検索 (`GET /2/users/search`)。`--max-results 1..1000`、`--all` で `next_token` 自動辿り (v0.6.0)
+- **`x user following [<ID|@username|URL>]` / `x user followers [<ID|@username|URL>]`** — フォロー / フォロワー一覧。`--user-id` 省略時は self、`@username` / URL 位置引数は `GetUserByUsername` で ID 解決後に graph 呼び出し (v0.6.0)
+- **`x user blocking` / `x user muting`** — 自アカのブロック / ミュート一覧。X API 仕様で self only のため `--user-id` フラグは意図的に未登録 (v0.6.0)
 - **`x configure`** — 対話形式で XDG 準拠の設定 / 認証情報ファイルを生成
 - **`x mcp`** — Streamable HTTP MCP サーバーを起動 (Claude Code Routines / MCP クライアント接続用)
   - 3 種類の認証モード: `none` (ローカル開発専用) / `apikey` (Bearer token) / `idproxy` (OIDC + cookie session)

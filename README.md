@@ -21,7 +21,8 @@ The design principle is **"CLI is the core, MCP is a thin wrapper"**. From `v0.3
 | `v0.2.0` | Remote MCP server (`x mcp --auth idproxy\|apikey\|none`) with `get_user_me` and `get_liked_tweets` tools, plus four `idproxy` store backends (memory / sqlite / redis / dynamodb) |
 | `v0.3.0` | `examples/lambroll/` AWS Lambda Function URL deployment sample + Claude Code Routines prompt template (`docs/routine-prompt.md`) + X API v2 reference (`docs/x-api.md`) |
 | `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (long-form) default fetch + `--max-results 1..4` auto-correction for `liked list` |
-| `v0.5.0` (this release, draft) | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30, **Basic tier required**) + `x timeline tweets` / `mentions` / `home` (M31) |
+| `v0.5.0` | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30, **Basic tier required**) + `x timeline tweets` / `mentions` / `home` (M31) |
+| `v0.6.0` (this release, draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — 9 Users Extended endpoints (M32) |
 
 See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specification.
 
@@ -42,6 +43,10 @@ See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specific
 - **`x timeline tweets [<ID>]`** — Fetch a user's tweet timeline via `GET /2/users/:id/tweets` (defaults to self). `--exclude retweets,replies` supported (v0.5.0)
 - **`x timeline mentions [<ID>]`** — Fetch tweets mentioning a user via `GET /2/users/:id/mentions` (defaults to self). Note: X API does not support `exclude` on this endpoint, so the flag is intentionally not registered (v0.5.0)
 - **`x timeline home`** — Fetch the authenticated user's home timeline via `GET /2/users/:id/timelines/reverse_chronological`. The target user is always self (X API spec); `--user-id` is intentionally not exposed (v0.5.0)
+- **`x user get [<ID|@username|URL>]` / `--ids` / `--usernames`** — Look up users by ID, `@username`, X URL, or batch up to 100 entries. Positional / `--ids` / `--usernames` are mutually exclusive (v0.6.0)
+- **`x user search <query>`** — Search users via `GET /2/users/search` (`--max-results 1..1000`, `--all` for `next_token` traversal) (v0.6.0)
+- **`x user following [<ID|@username|URL>]` / `x user followers [<ID|@username|URL>]`** — Fetch follow/follower lists. `--user-id` defaults to self; `@username` / URL positional args are resolved via `GetUserByUsername` first (v0.6.0)
+- **`x user blocking` / `x user muting`** — Fetch the authenticated user's block/mute lists. X API spec restricts these to self; `--user-id` is intentionally not exposed (v0.6.0)
 - **`x configure`** — Interactive setup of XDG-compliant config + credentials files
 - **`x mcp`** — Start a Streamable HTTP MCP server (Claude Code Routines / MCP client connectivity)
   - Three auth modes: `none` (local dev only), `apikey` (Bearer token), `idproxy` (OIDC + cookie session)
