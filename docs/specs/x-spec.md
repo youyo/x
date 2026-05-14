@@ -300,6 +300,37 @@ x user blocking             ※ M32、GET /2/users/:id/blocking (self only)
 x user muting               ※ M32、GET /2/users/:id/muting (self only)
   (blocking と同じフラグセット、--user-id は同様に未公開)
 
+x list get <ID|URL>         ※ M33、GET /2/lists/:id
+  ※ 位置引数は数値 ID または https://(x|twitter).com/i/lists/<NUM> URL のみ
+  --list-fields / --expansions / --user-fields / --no-json
+
+x list tweets <ID|URL>      ※ M33、GET /2/lists/:id/tweets
+  --max-results <1-100>     (default: 100)
+  --pagination-token <s>    / --all / --max-pages <int>
+  --tweet-fields / --user-fields / --expansions / --media-fields / --no-json / --ndjson
+
+x list members <ID|URL>     ※ M33、GET /2/lists/:id/members
+  --max-results <1-100>     (default: 100)
+  --pagination-token <s>    / --all / --max-pages <int>
+  --user-fields / --expansions / --tweet-fields / --no-json / --ndjson
+
+x list owned [<ID|@username|URL>]   ※ M33、GET /2/users/:id/owned_lists
+  --user-id <id>            (default: 認証ユーザー、位置引数指定時は上書き)
+  ※ @username / URL 位置引数は GetUserByUsername で ID 解決後に呼び出し (2 API call)
+  --max-results <1-100>     / --pagination-token / --all / --max-pages
+  --list-fields / --user-fields / --expansions / --no-json / --ndjson
+
+x list followed [<ID|@username|URL>]   ※ M33、GET /2/users/:id/followed_lists
+  (owned と同じフラグセット)
+
+x list memberships [<ID|@username|URL>]   ※ M33、GET /2/users/:id/list_memberships
+  (owned と同じフラグセット)
+
+x list pinned               ※ M33、GET /2/users/:id/pinned_lists (self only)
+  ※ X API 仕様で self のみ参照可能のため --user-id フラグは公開しない (GetUserMe で self 自動解決)
+  ※ X API はページネーション非対応のため --all / --pagination-token / --max-results は登録しない
+  --list-fields / --expansions / --user-fields / --no-json
+
 x mcp
   --host <addr>             (default: 127.0.0.1, Lambda は 0.0.0.0)
   --port <int>              (default: 8080)

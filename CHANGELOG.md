@@ -6,9 +6,31 @@
 
 ## [0.6.0] - 2026-05-14 (draft)
 
-X API v2 の Users Extended エンドポイント群 (lookup / search / graph / blocking / muting) を `x user` サブコマンドとして CLI に追加する (M32)。9 endpoint をカバーし、`blocking` / `muting` は X API 仕様で self only のため、CLI 側で `--user-id` フラグ自体を公開しない設計とした。
+X API v2 の Users Extended エンドポイント群 (lookup / search / graph / blocking / muting) を `x user` サブコマンドとして CLI に追加する (M32)。9 endpoint をカバーし、`blocking` / `muting` は X API 仕様で self only のため、CLI 側で `--user-id` フラグ自体を公開しない設計とした。続いて Lists エンドポイント群 (lookup / tweets / members / owned / followed / memberships / pinned) を `x list` サブコマンドとして追加した (M33)。`pinned` は X API 仕様で self only のため `--user-id` フラグを公開しない (M32 D-5 と同パターン)。
 
 ### Added
+
+#### `x list` サブコマンド (M33)
+- `x list get <ID|URL>` — 単一 List 取得。位置引数は数値 ID または `https://(x|twitter).com/i/lists/<NUM>` URL を判別 (`extractListID`)
+- `x list tweets <ID|URL>` — List のツイート (`GET /2/lists/:id/tweets`)。`--max-results 1..100`、`--all` で `pagination_token` 自動辿り、`--no-json` / `--ndjson` 対応
+- `x list members <ID|URL>` — List メンバー (`GET /2/lists/:id/members`)。出力はユーザー配列、`--no-json` で `id=... username=... name=...` 形式
+- `x list owned [<ID|@username|URL>]` — 所有 List 一覧 (`GET /2/users/:id/owned_lists`)。位置引数省略時は self、`@username`/URL 指定時は `GetUserByUsername` で ID 解決後に List 呼び出し (2 API call、M33 D-10)
+- `x list followed [<ID|@username|URL>]` — フォロー中 List 一覧 (`GET /2/users/:id/followed_lists`)
+- `x list memberships [<ID|@username|URL>]` — 参加 List 一覧 (`GET /2/users/:id/list_memberships`)
+- `x list pinned` — ピン留め List 一覧 (`GET /2/users/:id/pinned_lists`)。X API 仕様で self only のため **`--user-id` フラグは非登録** (M33 D-7)、`GetUserMe` で self を必ず解決
+- 共通フラグ: `--max-results 1..100`、`--pagination-token`、`--all` + `--max-pages` (default 50)、`--no-json` / `--ndjson` (排他)、`--list-fields` / `--user-fields` / `--tweet-fields` / `--expansions` / `--media-fields` (endpoint ごとに必要な分のみ登録)
+- `pinned_lists` はページネーション非サポート (X API 仕様)
+
+#### `xapi` パッケージ拡張 (M33)
+- 7 新規メソッド: `Client.GetList` / `GetListTweets` / `GetListMembers` / `GetOwnedLists` / `GetListMemberships` / `GetFollowedLists` / `GetPinnedLists`
+- 5 新規 iterator: `EachListTweetsPage` / `EachListMembersPage` / `EachOwnedListsPage` / `EachListMembershipsPage` / `EachFollowedListsPage`
+- 2 新規 Option 型 (用途別分離、M33 D-1):
+  - `ListLookupOption` — `WithListLookupListFields` / `WithListLookupExpansions` / `WithListLookupUserFields` (GetList / GetPinnedLists で再利用、M33 D-5)
+  - `ListPagedOption` — `WithListPagedMaxResults` / `WithListPagedPaginationToken` / 各種 fields + expansions + `WithListPagedMaxPages` (paged 5 endpoint で共通)
+- 新規 DTO: `List` (id/name/private/owner_id/member_count/follower_count/created_at) / `ListResponse` (単一) / `ListsResponse` (List 配列、owned/memberships/followed/pinned) / `ListTweetsResponse` (Tweet 配列、list tweets 専用)
+- `GetListMembers` のレスポンス型は既存 `UsersResponse` (M32) を再利用 (M33 D-4)
+- 全 5 paged endpoint で X API クエリパラメータ `pagination_token` を統一採用 (X API docs で next_token 表記が混在する members も pagination_token で送信、テストで pin、M33 D-2)
+- `computeInterPageWait(rl, threshold)` (M29) を再利用 (threshold=2、他系統と同値)
 
 #### `x user` サブコマンド (M32)
 - `x user get [<ID|@username|URL>]` — 単一ユーザー lookup。位置引数は ID/`@username`/URL を自動判別 (`extractUserRef`)
@@ -35,7 +57,7 @@ X API v2 の Users Extended エンドポイント群 (lookup / search / graph / 
 
 - v0.5.0 以前の CLI / MCP 機能は完全後方互換
 - 設定ファイル `config.toml` への変更なし
-- `blocking` / `muting` は X API 仕様で OAuth 1.0a 認証ユーザーの self のみ参照可能 (本リポジトリは OAuth 1.0a 専用のため問題なし)
+- `blocking` / `muting` / `list pinned` は X API 仕様で OAuth 1.0a 認証ユーザーの self のみ参照可能 (本リポジトリは OAuth 1.0a 専用のため問題なし)
 
 ## [0.5.0] - 2026-05-14 (draft)
 

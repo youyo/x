@@ -22,7 +22,7 @@ The design principle is **"CLI is the core, MCP is a thin wrapper"**. From `v0.3
 | `v0.3.0` | `examples/lambroll/` AWS Lambda Function URL deployment sample + Claude Code Routines prompt template (`docs/routine-prompt.md`) + X API v2 reference (`docs/x-api.md`) |
 | `v0.4.0` | `x tweet get` / `liking-users` / `retweeted-by` / `quote-tweets` (M29) + `note_tweet` (long-form) default fetch + `--max-results 1..4` auto-correction for `liked list` |
 | `v0.5.0` | `x tweet search <query>` + `x tweet thread <ID\|URL>` (M30, **Basic tier required**) + `x timeline tweets` / `mentions` / `home` (M31) |
-| `v0.6.0` (this release, draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — 9 Users Extended endpoints (M32) |
+| `v0.6.0` (this release, draft) | `x user get` / `search` / `following` / `followers` / `blocking` / `muting` — 9 Users Extended endpoints (M32) + `x list get` / `tweets` / `members` / `owned` / `followed` / `memberships` / `pinned` — 7 Lists endpoints (M33) |
 
 See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specification.
 
@@ -47,6 +47,11 @@ See [`docs/specs/x-spec.md`](docs/specs/x-spec.md) for the full product specific
 - **`x user search <query>`** — Search users via `GET /2/users/search` (`--max-results 1..1000`, `--all` for `next_token` traversal) (v0.6.0)
 - **`x user following [<ID|@username|URL>]` / `x user followers [<ID|@username|URL>]`** — Fetch follow/follower lists. `--user-id` defaults to self; `@username` / URL positional args are resolved via `GetUserByUsername` first (v0.6.0)
 - **`x user blocking` / `x user muting`** — Fetch the authenticated user's block/mute lists. X API spec restricts these to self; `--user-id` is intentionally not exposed (v0.6.0)
+- **`x list get <ID|URL>`** — Look up a List by numeric ID or `https://x.com/i/lists/<ID>` URL (v0.6.0)
+- **`x list tweets <ID|URL>`** — Fetch a List's tweets via `GET /2/lists/:id/tweets` (`--max-results 1..100`, `--all` for `pagination_token` traversal) (v0.6.0)
+- **`x list members <ID|URL>`** — Fetch a List's members (users) via `GET /2/lists/:id/members` (v0.6.0)
+- **`x list owned [<ID|@username|URL>]` / `x list followed` / `x list memberships`** — Fetch Lists owned/followed/joined by a user (defaults to self; `@username`/URL positional args are resolved via `GetUserByUsername` first) (v0.6.0)
+- **`x list pinned`** — Fetch the authenticated user's pinned Lists. X API spec restricts this to self and does NOT support pagination; `--user-id` / `--all` are intentionally not exposed (v0.6.0)
 - **`x configure`** — Interactive setup of XDG-compliant config + credentials files
 - **`x mcp`** — Start a Streamable HTTP MCP server (Claude Code Routines / MCP client connectivity)
   - Three auth modes: `none` (local dev only), `apikey` (Bearer token), `idproxy` (OIDC + cookie session)

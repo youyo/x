@@ -32,7 +32,7 @@ M28 までの全 28 マイルストーンが完了 (v0.3.0 リリース準備完
 2. **M30**: Search Recent + Thread コマンド (v0.5.0) ✅ 完了
 3. **M31**: User Timelines (v0.5.0) ✅ 完了
 4. **M32**: Users Extended (v0.6.0) ✅ 完了
-5. **M33**: Lists (v0.6.0) ← 次の着手対象
+5. **M33**: Lists (v0.6.0) ✅ 完了
 6. **M34**: Spaces + Trends (v0.7.0)
 7. **M35**: DM Read (v0.7.0、Pro 推奨)
 8. **M36**: MCP v2 Tools (v0.8.0、CLI M29-M35 全完了後)
@@ -333,11 +333,11 @@ docker pull ghcr.io/youyo/x:v0.1.0 && docker run --rm ghcr.io/youyo/x:v0.1.0 ver
 - [x] T4 (検証 + Docs): test 55+ ケース pass / lint 0 / vet 0 / `docs/x-api.md` §1.5 + Rate Limit 表 / spec §6 / README 英日 / CHANGELOG 新規 `[0.6.0]`
 - 📄 詳細: [plans/x-m32-users-extended.md](./x-m32-users-extended.md)
 
-#### M33: Lists ⏳ 未着手
-- [ ] T1: `internal/xapi/lists.go` 新規 — `GetList` / `GetListTweets` / `GetListMembers` / `GetOwnedLists` / `GetListMemberships` / `GetFollowedLists` / `GetPinnedLists`
-- [ ] T2: `internal/cli/list.go` 新規 — `list get` / `list tweets` / `list members` / `list owned` / `list followed` / `list memberships`
-- [ ] T3: `internal/cli/root.go` — `AddCommand(newListCmd())`
-- [ ] T4 (検証 + Docs): test / `x list tweets <ID>` / `x list owned` 実機 / CHANGELOG
+#### M33: Lists ✅ 完了
+- [x] T1: `internal/xapi/lists.go` 新規 — `GetList` / `GetListTweets` / `GetListMembers` / `GetOwnedLists` / `GetListMemberships` / `GetFollowedLists` / `GetPinnedLists` + 5 iterator (`pagination_token` 統一)
+- [x] T2: `internal/cli/list.go` 新規 — `list get` / `list tweets` / `list members` / `list owned` / `list followed` / `list memberships` / `list pinned` (self only)、`extractListID`、`listClient` interface
+- [x] T3: `internal/cli/root.go` — `AddCommand(newListCmd())` + TestRootHelpShowsList
+- [x] T4 (検証 + Docs): test/lint/vet 全 pass / `docs/x-api.md` §1.6 + Rate Limit 表 / spec §6 / README 英日 / CHANGELOG `[0.6.0]` 拡張
 - 📄 詳細: [plans/x-m33-lists.md](./x-m33-lists.md)
 
 #### M34: Spaces + Trends ⏳ 未着手
