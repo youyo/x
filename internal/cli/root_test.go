@@ -45,6 +45,25 @@ func TestRootHelpShowsVersion(t *testing.T) {
 	}
 }
 
+// TestRootHelpShowsTweet は `x --help` に tweet サブコマンドが表示されることを検証する (M29)。
+func TestRootHelpShowsTweet(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "tweet") {
+		t.Errorf("help output missing %q, got: %s", "tweet", out)
+	}
+}
+
 // TestRootHelpShowsCompletion は `x --help` に Cobra 自動追加の completion サブコマンドが
 // 表示されることを検証する。
 func TestRootHelpShowsCompletion(t *testing.T) {
