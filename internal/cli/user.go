@@ -561,6 +561,7 @@ func newUserBlockingCmd() *cobra.Command {
 			"X API spec restricts this endpoint to the authenticated user; --user-id is intentionally NOT exposed.\n" +
 			"--max-results 1..1000 (X API per-page).\n" +
 			"Exit codes: 0 success, 1 generic, 2 argument error, 3 auth, 4 permission, 5 not found.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runUserGraph(cmd, f, "", userGraphKindBlocking)
 		},
@@ -578,6 +579,7 @@ func newUserMutingCmd() *cobra.Command {
 			"X API spec restricts this endpoint to the authenticated user; --user-id is intentionally NOT exposed.\n" +
 			"--max-results 1..1000 (X API per-page).\n" +
 			"Exit codes: 0 success, 1 generic, 2 argument error, 3 auth, 4 permission, 5 not found.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runUserGraph(cmd, f, "", userGraphKindMuting)
 		},
